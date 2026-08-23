@@ -1,12 +1,17 @@
 export default {
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname === "/api/tickets" && request.method === "POST") {
+      const ticket = await request.json();
+
       return Response.json({
-        name: "Cloudflare",
+        success: true,
+        message: "Ticket received successfully",
+        ticket,
       });
     }
-		return new Response(null, { status: 404 });
+
+    return new Response("Not Found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
