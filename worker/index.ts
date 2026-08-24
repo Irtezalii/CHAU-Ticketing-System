@@ -25,6 +25,12 @@ interface TicketRequestBody {
   otherTimeframe?: string;
 }
 
+interface MessageRequestBody {
+  senderName?: string;
+  senderRole?: 'user' | 'agent';
+  message?: string;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -141,6 +147,102 @@ export default {
           {
             success: false,
             message: 'Database error saving ticket',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // GET /api/tickets/:ticketRef - Fetch single ticket info
+const ticketSingleMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)$/);
+if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/messages')) {
+  const ticketRef = ticketSingleMatch[1];
+  try {
+    const ticket = await env.ticketing_db
+      .prepare('SELECT * FROM tickets WHERE ticket_ref = ? OR id = ?')
+      .bind(ticketRef, ticketRef)
+      .first();
+
+    if (!ticket) {
+      return Response.json({ success: false, message: 'Ticket not found' }, { status: 404 });
+    }
+
+    return Response.json({ success: true, ticket });
+  } catch (error) {
+    return Response.json(
+      {
+        success: false,
+        message: 'Failed to fetch ticket details',
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+    // MATCH /api/tickets/:ticketRef/messages
+    const messagesMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)\/messages$/);
+
+    // GET /api/tickets/:ticketRef/messages - Fetch all chat messages for a ticket
+    if (request.method === 'GET' && messagesMatch) {
+      const ticketRef = messagesMatch[1];
+      try {
+        const { results } = await env.ticketing_db
+          .prepare('SELECT * FROM ticket_messages WHERE ticket_ref = ? ORDER BY id ASC')
+          .bind(ticketRef)
+          .all();
+
+        return Response.json({ success: true, messages: results });
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            message: 'Failed to fetch messages',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // POST /api/tickets/:ticketRef/messages - Send a new message
+    if (request.method === 'POST' && messagesMatch) {
+      const ticketRef = messagesMatch[1];
+      try {
+        const body = (await request.json()) as MessageRequestBody;
+        const senderName = body.senderName?.trim() || 'Anonymous';
+        const senderRole = body.senderRole || 'user';
+        const message = body.message?.trim();
+
+        if (!message) {
+          return Response.json(
+            { success: false, message: 'Message cannot be empty' },
+            { status: 400 }
+          );
+        }
+
+        const query = `
+          INSERT INTO ticket_messages (ticket_ref, sender_name, sender_role, message)
+          VALUES (?, ?, ?, ?)
+          RETURNING *;
+        `;
+
+        const insertedMessage = await env.ticketing_db
+          .prepare(query)
+          .bind(ticketRef, senderName, senderRole, message)
+          .first();
+
+        return Response.json(
+          { success: true, message: 'Message sent', data: insertedMessage },
+          { status: 201 }
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            message: 'Database error saving message',
             error: error instanceof Error ? error.message : String(error),
           },
           { status: 500 }

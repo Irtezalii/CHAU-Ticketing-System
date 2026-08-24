@@ -55,6 +55,30 @@
       scale(0.8);
   }
 }
+/* Custom Thin Scrollbar for All Browsers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1f2937 #080b10;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080b10;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
 
 #center {
   display: flex;
