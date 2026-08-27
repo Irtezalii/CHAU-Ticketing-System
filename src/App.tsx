@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TicketChat from './components/TicketChat';
+import AdminTable from './components/AdminTable';
 
 type RequestType = '' | 'problem' | 'question' | 'workspace' | 'campaign' | 'other';
 type ImpactLevel = 'blocked' | 'workaround' | 'minor' | '';
@@ -82,8 +83,9 @@ export default function App() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [isAdminView, setIsAdminView] = useState<boolean>(() => window.location.pathname === '/admin');
+
   // Active Chat State
-  // Initialize state directly from the window location (prevents cascading render lint error)
   const [activeChatRef, setActiveChatRef] = useState<string | null>(() => {
     const path = window.location.pathname;
     const match = path.match(/^\/ticket\/([^/]+)$/);
@@ -94,8 +96,14 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const currentPath = window.location.pathname;
-      const pathMatch = currentPath.match(/^\/ticket\/([^/]+)$/);
-      setActiveChatRef(pathMatch ? pathMatch[1] : null);
+      if (currentPath === '/admin') {
+        setIsAdminView(true);
+        setActiveChatRef(null);
+      } else {
+        setIsAdminView(false);
+        const pathMatch = currentPath.match(/^\/ticket\/([^/]+)$/);
+        setActiveChatRef(pathMatch ? pathMatch[1] : null);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -104,6 +112,7 @@ export default function App() {
 
   const openTicketChat = (ref: string) => {
     setActiveChatRef(ref);
+    setIsAdminView(false);
     window.history.pushState({}, '', `/ticket/${ref}`);
   };
 
@@ -135,7 +144,7 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    if (activeTab === 'list') {
+    if (activeTab === 'list' && !isAdminView) {
       const loadTickets = async () => {
         if (!initialLoaded) setFetchingTickets(true);
         setFetchError(null);
@@ -167,7 +176,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, initialLoaded]);
+  }, [activeTab, initialLoaded, isAdminView]);
 
   const calculatePriority = (): { priority: string; label: string } => {
     if (!form.requestType) return { priority: 'P3', label: 'Medium' };
@@ -302,8 +311,17 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className={`flex-1 flex flex-col justify-start items-center ${activeChatRef ? 'p-2 sm:p-4 overflow-hidden' : 'p-4 sm:p-8 pt-6 sm:pt-10'}`}>
-        {activeChatRef ? (
+      <main className={`flex-1 flex flex-col justify-start items-center ${activeChatRef || isAdminView ? 'p-2 sm:p-4 overflow-hidden' : 'p-4 sm:p-8 pt-6 sm:pt-10'}`}>
+
+        {isAdminView ? (
+          <AdminTable
+            onOpenChat={(ref) => openTicketChat(ref)}
+            onGoHome={() => {
+              setIsAdminView(false);
+              window.history.pushState({}, '', '/');
+            }}
+          />
+        ) : activeChatRef ? (
           <TicketChat ticketRef={activeChatRef} onBack={closeTicketChat} />
         ) : (
           <div className="w-full max-w-[680px] bg-[#0f1521] border border-[#242e3f] rounded-2xl overflow-hidden shadow-2xl flex flex-col">

@@ -250,6 +250,44 @@ if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/me
       }
     }
 
+    // PATCH /api/tickets/:ticketRef - Update ticket status or assignee
+    const ticketPatchMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)$/);
+    if (request.method === 'PATCH' && ticketPatchMatch && !url.pathname.endsWith('/messages')) {
+      const ticketRef = ticketPatchMatch[1];
+      try {
+        const body: any = await request.json();
+        const status = body.status;
+        const assignee = body.assignee;
+        const priority = body.priority;
+
+        const query = `
+          UPDATE tickets
+          SET status = COALESCE(?, status),
+              assignee = COALESCE(?, assignee),
+              priority = COALESCE(?, priority),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE ticket_ref = ? OR id = ?
+          RETURNING *;
+        `;
+
+        const updated = await env.ticketing_db
+          .prepare(query)
+          .bind(status || null, assignee || null, priority || null, ticketRef, ticketRef)
+          .first();
+
+        return Response.json({ success: true, ticket: updated });
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            message: 'Failed to update ticket',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
