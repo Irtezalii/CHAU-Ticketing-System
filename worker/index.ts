@@ -31,11 +31,48 @@ interface MessageRequestBody {
   message?: string;
 }
 
+// ----------------------------------------------------
+// AUTHENTICATION CONFIGURATION
+// ----------------------------------------------------
+const AUTHORIZED_USERS = ['ali', 'hammad', 'sabih', 'benji', 'steven', 'vic'];
+// In a production environment, this should ideally be an environment variable.
+const ADMIN_SECRET_TOKEN = 'super_secret_admin_token_123';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // GET /api/tickets - Fetch all tickets ordered by creation date
+    // ----------------------------------------------------
+    // POST /api/admin/login - Authenticate Admin User
+    // ----------------------------------------------------
+    if (request.method === 'POST' && url.pathname === '/api/admin/login') {
+      try {
+        const body = (await request.json()) as { username?: string };
+        const username = body.username?.toLowerCase().trim();
+
+        if (username && AUTHORIZED_USERS.includes(username)) {
+          return Response.json(
+            {
+              success: true,
+              username: username,
+              token: ADMIN_SECRET_TOKEN
+            },
+            { status: 200 }
+          );
+        }
+
+        return Response.json(
+          { success: false, message: 'Unauthorized. Invalid username.' },
+          { status: 401 }
+        );
+      } catch (error) {
+        return Response.json({ success: false, message: 'Bad request' }, { status: 400 });
+      }
+    }
+
+    // ----------------------------------------------------
+    // GET /api/tickets - Fetch all tickets (PUBLIC)
+    // ----------------------------------------------------
     if (request.method === 'GET' && url.pathname === '/api/tickets') {
       try {
         const { results } = await env.ticketing_db
@@ -55,7 +92,9 @@ export default {
       }
     }
 
-    // POST /api/tickets - Submit a new ticket
+    // ----------------------------------------------------
+    // POST /api/tickets - Submit a new ticket (PUBLIC)
+    // ----------------------------------------------------
     if (request.method === 'POST' && url.pathname === '/api/tickets') {
       try {
         const body = (await request.json()) as TicketRequestBody;
@@ -154,38 +193,43 @@ export default {
       }
     }
 
+    // ----------------------------------------------------
+    // GET /api/tickets/:ticketRef - Fetch single ticket (PUBLIC)
+    // ----------------------------------------------------
+    const ticketSingleMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)$/);
+    if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/messages')) {
+      const ticketRef = ticketSingleMatch[1];
+      try {
+        const ticket = await env.ticketing_db
+          .prepare('SELECT * FROM tickets WHERE ticket_ref = ? OR id = ?')
+          .bind(ticketRef, ticketRef)
+          .first();
 
-    // GET /api/tickets/:ticketRef - Fetch single ticket info
-const ticketSingleMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)$/);
-if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/messages')) {
-  const ticketRef = ticketSingleMatch[1];
-  try {
-    const ticket = await env.ticketing_db
-      .prepare('SELECT * FROM tickets WHERE ticket_ref = ? OR id = ?')
-      .bind(ticketRef, ticketRef)
-      .first();
+        if (!ticket) {
+          return Response.json({ success: false, message: 'Ticket not found' }, { status: 404 });
+        }
 
-    if (!ticket) {
-      return Response.json({ success: false, message: 'Ticket not found' }, { status: 404 });
+        return Response.json({ success: true, ticket });
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            message: 'Failed to fetch ticket details',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
     }
 
-    return Response.json({ success: true, ticket });
-  } catch (error) {
-    return Response.json(
-      {
-        success: false,
-        message: 'Failed to fetch ticket details',
-        error: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
-  }
-}
-
+    // ----------------------------------------------------
     // MATCH /api/tickets/:ticketRef/messages
+    // ----------------------------------------------------
     const messagesMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)\/messages$/);
 
-    // GET /api/tickets/:ticketRef/messages - Fetch all chat messages for a ticket
+    // ----------------------------------------------------
+    // GET /api/tickets/:ticketRef/messages (PUBLIC)
+    // ----------------------------------------------------
     if (request.method === 'GET' && messagesMatch) {
       const ticketRef = messagesMatch[1];
       try {
@@ -207,7 +251,9 @@ if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/me
       }
     }
 
-    // POST /api/tickets/:ticketRef/messages - Send a new message
+    // ----------------------------------------------------
+    // POST /api/tickets/:ticketRef/messages (PUBLIC)
+    // ----------------------------------------------------
     if (request.method === 'POST' && messagesMatch) {
       const ticketRef = messagesMatch[1];
       try {
@@ -250,9 +296,16 @@ if (request.method === 'GET' && ticketSingleMatch && !url.pathname.endsWith('/me
       }
     }
 
-    // PATCH /api/tickets/:ticketRef - Update ticket status or assignee
+    // ----------------------------------------------------
+    // PATCH /api/tickets/:ticketRef - Update ticket (PROTECTED ROUTE)
+    // ----------------------------------------------------
     const ticketPatchMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)$/);
     if (request.method === 'PATCH' && ticketPatchMatch && !url.pathname.endsWith('/messages')) {
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader !== `Bearer ${ADMIN_SECRET_TOKEN}`) {
+        return Response.json({ success: false, message: 'Unauthorized access' }, { status: 401 });
+      }
+
       const ticketRef = ticketPatchMatch[1];
       try {
         const body: any = await request.json();
