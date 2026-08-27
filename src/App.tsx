@@ -702,7 +702,7 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="text-[17px] font-bold text-white">Thanks — we've got it</h3>
-                      <p className="text-[12.8px] text-[#aab4c2] mt-1">It's with the support team now. Saved in Cloudflare D1.</p>
+                      <p className="text-[12.8px] text-[#aab4c2] mt-1">It's with the support team now.</p>
                     </div>
 
                     <div className="inline-block bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-1.5 text-[14px] font-bold text-[#7cb5ff] tracking-wide">
@@ -711,7 +711,7 @@ export default function App() {
 
                     <div className="text-left bg-[#141b28] border border-[#242e3f] rounded-xl p-3.5 space-y-2 text-[12.3px] text-[#aab4c2]">
                       <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#3b82f6] before:rounded-full">
-                        <b className="text-white">A person will reply {ticketSla}</b> — a real reply, not an auto-message.
+                        <b className="text-white">A person will reply {ticketSla}</b>
                       </div>
                       <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#3b82f6] before:rounded-full">
                         You'll get updates as it progresses.
@@ -723,7 +723,7 @@ export default function App() {
                         onClick={() => openTicketChat(ticketRef)}
                         className="flex-1 bg-[#3b82f6] hover:bg-[#2f74e8] text-white font-semibold py-2.5 rounded-xl text-[13px] transition-all duration-150 flex justify-center items-center gap-1.5"
                       >
-                        💬 Open Chat Thread
+                        Open Chat
                       </button>
                       <button
                         onClick={resetForm}
