@@ -121,7 +121,12 @@ export default function TicketList({
         ) : (
           <div className={`space-y-4 ${fetchingTickets ? 'opacity-60 pointer-events-none transition-opacity duration-150' : ''}`}>
             {paginatedTickets.map((t) => (
-              <TicketCard key={t.id} ticket={t} onOpenChat={onOpenChat} />
+              <TicketCard
+                key={t.id}
+                ticket={t}
+                onOpenChat={onOpenChat}
+                onTicketReopened={onRefresh}
+              />
             ))}
           </div>
         )}

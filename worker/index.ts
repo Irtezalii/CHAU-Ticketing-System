@@ -326,6 +326,59 @@ export default {
     }
 
     // ----------------------------------------------------
+    // POST /api/tickets/:ticketRef/reopen (PUBLIC)
+    // ----------------------------------------------------
+    const reopenMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)\/reopen$/);
+    if (request.method === 'POST' && reopenMatch) {
+      const ticketRef = reopenMatch[1];
+      try {
+        const existingTicket = await env.ticketing_db
+          .prepare('SELECT * FROM tickets WHERE ticket_ref = ? OR id = ?')
+          .bind(ticketRef, ticketRef)
+          .first();
+
+        if (!existingTicket) {
+          return Response.json({ success: false, message: 'Ticket not found' }, { status: 404 });
+        }
+
+        const updateQuery = `
+          UPDATE tickets
+          SET status = 'In Progress',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE ticket_ref = ? OR id = ?
+          RETURNING *;
+        `;
+
+        const updatedTicket = await env.ticketing_db
+          .prepare(updateQuery)
+          .bind(ticketRef, ticketRef)
+          .first();
+
+        const exactRef = (existingTicket as Record<string, any>).ticket_ref || ticketRef;
+        const msgQuery = `
+          INSERT INTO ticket_messages (ticket_ref, sender_name, sender_role, message)
+          VALUES (?, 'System', 'agent', 'Ticket was reopened and moved back to In Progress.')
+        `;
+        await env.ticketing_db.prepare(msgQuery).bind(exactRef).run();
+
+        return Response.json({
+          success: true,
+          message: 'Ticket reopened successfully',
+          ticket: updatedTicket,
+        });
+      } catch (error) {
+        return Response.json(
+          {
+            success: false,
+            message: 'Failed to reopen ticket',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ----------------------------------------------------
     // MATCH /api/tickets/:ticketRef/messages
     // ----------------------------------------------------
     const messagesMatch = url.pathname.match(/^\/api\/tickets\/([^/]+)\/messages$/);

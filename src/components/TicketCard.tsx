@@ -1,28 +1,70 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { STATUS_BORDER_LEFT, STATUS_THEME } from '../constants/ticket';
 import type { TicketRecord } from '../types/ticket';
-import { STATUS_THEME } from '../constants/ticket';
 
 interface TicketCardProps {
   ticket: TicketRecord;
   onOpenChat: (ticketRef: string) => void;
+  onTicketReopened?: () => void;
 }
 
-export default function TicketCard({ ticket, onOpenChat }: TicketCardProps) {
+export default function TicketCard({ ticket, onOpenChat, onTicketReopened }: TicketCardProps) {
+  const [isReopening, setIsReopening] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
+
   const refStr = ticket.ticket_ref || `TK-${ticket.id}`;
-  const displayStatus = ticket.status === 'OPEN' ? 'Not Started' : (ticket.status || 'Not Started');
-  const statusStyles = STATUS_THEME[displayStatus] || 'bg-[#1f2937]/30 text-[#9ca3af] border-[#374151]';
+  const displayStatus =
+    ticket.status === 'OPEN' ? 'Not Started' : ticket.status || 'Not Started';
+  const statusStyles =
+    STATUS_THEME[displayStatus] ||
+    'bg-[#1f2937]/30 text-[#9ca3af] border-[#374151]';
+  const leftBorderColor =
+    STATUS_BORDER_LEFT[displayStatus] || 'border-l-[#64748b]';
+
+  const isResolved = displayStatus === 'Resolved';
+
+  const handleReopen = async () => {
+    setIsReopening(true);
+    setReopenError(null);
+    try {
+      const res = await fetch(`/api/tickets/${encodeURIComponent(refStr)}/reopen`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (onTicketReopened) {
+          onTicketReopened();
+        }
+      } else {
+        setReopenError(data.message || 'Failed to reopen ticket');
+      }
+    } catch {
+      setReopenError('Network error while reopening ticket');
+    } finally {
+      setIsReopening(false);
+    }
+  };
 
   return (
-    <div className="bg-[#141b28] border border-[#242e3f] hover:border-[#2e3a4e] rounded-xl p-5 space-y-3 transition-all duration-150 shadow-sm flex flex-col">
+    <div
+      className={`bg-[#141b28] border border-[#242e3f] border-l-4 ${leftBorderColor} hover:border-[#2e3a4e] hover:${leftBorderColor} rounded-xl p-5 space-y-3 transition-all duration-150 shadow-sm flex flex-col`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <span className="text-[11px] font-bold tracking-wider text-[#7cb5ff] bg-[#3b82f6]/10 px-2.5 py-0.5 rounded border border-[#3b82f6]/20">
             {refStr}
           </span>
-          <h4 className="text-[14.5px] font-bold text-white pt-1 leading-snug">{ticket.subject}</h4>
+          <h4 className="text-[14.5px] font-bold text-white pt-1 leading-snug">
+            {ticket.subject}
+          </h4>
         </div>
 
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border whitespace-nowrap ${statusStyles}`}>
+        <span
+          className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border whitespace-nowrap ${statusStyles}`}
+        >
           {displayStatus}
         </span>
       </div>
@@ -31,6 +73,12 @@ export default function TicketCard({ ticket, onOpenChat }: TicketCardProps) {
         {ticket.main_description || 'No description provided.'}
       </p>
 
+      {reopenError && (
+        <div className="text-[11px] text-[#f87171] bg-[#f87171]/10 border border-[#f87171]/20 rounded px-2.5 py-1">
+          {reopenError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-3.5 border-t border-[#1e2736]">
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#7b8697]">
           <div>
@@ -38,7 +86,8 @@ export default function TicketCard({ ticket, onOpenChat }: TicketCardProps) {
           </div>
           <div>•</div>
           <div>
-            <span className="text-[#aab4c2]">Category:</span> {ticket.request_type}
+            <span className="text-[#aab4c2]">Category:</span>{' '}
+            {ticket.request_type}
           </div>
           <div>•</div>
           <div>
@@ -46,16 +95,55 @@ export default function TicketCard({ ticket, onOpenChat }: TicketCardProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onOpenChat(refStr)}
-          className="text-[11.5px] bg-[#1d4ed8] hover:bg-[#1e40af] text-white font-semibold px-3 py-1.5 rounded-lg transition-colors shadow-sm flex-shrink-0 ml-2 flex items-center gap-1.5"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          View Chat
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          {isResolved && (
+            <button
+              type="button"
+              onClick={handleReopen}
+              disabled={isReopening}
+              title="Reopen ticket and move back to In Progress"
+              className="text-[11.5px] bg-[#d97706]/15 hover:bg-[#d97706]/25 border border-[#d97706]/40 hover:border-[#d97706]/70 text-[#fbbf24] font-semibold px-3 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={isReopening ? 'animate-spin' : ''}
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+              <span>{isReopening ? 'Reopening...' : 'Reopen'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onOpenChat(refStr)}
+            className="text-[11.5px] bg-[#1d4ed8] hover:bg-[#1e40af] text-white font-semibold px-3 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            View Chat
+          </button>
+        </div>
       </div>
     </div>
   );
