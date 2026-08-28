@@ -123,12 +123,14 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
   const currentPriorityInfo = calculatePriority();
 
   return (
+
+
     <div className="transition-opacity duration-150 ease-in-out">
       {!submittedRef ? (
         <form onSubmit={handleSubmit} className="p-5 sm:p-7 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+              <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                 Name <span className="text-[#f87171]">*</span>
               </label>
               <input
@@ -137,11 +139,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                 value={form.name}
                 onChange={handleTextChange}
                 placeholder="Jane Doe"
-                className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+                className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
               />
             </div>
             <div>
-              <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+              <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                 Email <span className="text-[#f87171]">*</span>
               </label>
               <input
@@ -150,13 +152,13 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                 value={form.email}
                 onChange={handleTextChange}
                 placeholder="jane@example.com"
-                className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+                className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="title" className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+            <label htmlFor="title" className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
               Give it a short title <span className="text-[#f87171]">*</span>
             </label>
             <input
@@ -167,12 +169,12 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
               value={form.title}
               onChange={handleTextChange}
               placeholder="e.g. Bookings not showing in calendar"
-              className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+              className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
             />
           </div>
 
           <div>
-            <label htmlFor="mainDescription" className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+            <label htmlFor="mainDescription" className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
               Tell us what you need <span className="text-[#f87171]">*</span>
             </label>
             <textarea
@@ -182,23 +184,23 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
               value={form.mainDescription}
               onChange={handleTextChange}
               placeholder="Describe your request, steps to reproduce, or details..."
-              className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6] resize-none"
+              className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] resize-none"
             />
           </div>
 
-          <div className="h-px bg-[#242e3f] my-3"></div>
+          <div className="h-px bg-[#1f2937] my-3"></div>
 
           <div>
-            <label htmlFor="requestType" className="block text-[12.5px] font-semibold text-[#e9edf3] mb-0.5">
+            <label htmlFor="requestType" className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-0.5">
               What do you need? <span className="text-[#f87171]">*</span>
             </label>
-            <p className="text-[11.5px] text-[#7b8697] mb-2">Pick one and we'll only ask what's relevant.</p>
+            <p className="text-[11.5px] text-[#6b7280] mb-2">Pick one and we'll only ask what's relevant.</p>
             <select
               id="requestType"
               name="requestType"
               value={form.requestType}
               onChange={handleTextChange}
-              className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6] cursor-pointer"
+              className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb] cursor-pointer"
             >
               <option value="">Choose one…</option>
               <option value="problem">Fix a problem</option>
@@ -212,21 +214,21 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           {form.requestType === 'problem' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   Lead Phone Number
                 </label>
-                <p className="text-[11.5px] text-[#7b8697] mb-1.5">Phone number of affected contact/lead if applicable.</p>
+                <p className="text-[11.5px] text-[#6b7280] mb-1.5">Phone number of affected contact/lead if applicable.</p>
                 <input
                   type="tel"
                   name="leadPhone"
                   value={form.leadPhone}
                   onChange={handleTextChange}
                   placeholder="+1 555 0199"
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
                 />
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   What should have happened? <span className="text-[#f87171]">*</span>
                 </label>
                 <textarea
@@ -235,15 +237,15 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   value={form.expectedBehavior}
                   onChange={handleTextChange}
                   placeholder="The booking should show in the calendar within a minute."
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6] resize-none"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] resize-none"
                 />
               </div>
               <div>
                 <fieldset>
-                  <legend className="text-[12.5px] font-semibold text-[#e9edf3] mb-0.5">
+                  <legend className="text-[12.5px] font-semibold text-[#e5e7eb] mb-0.5">
                     Can you still work? <span className="text-[#f87171]">*</span>
                   </legend>
-                  <p className="text-[11.5px] text-[#7b8697] mb-2">This is how we decide what to pick up first.</p>
+                  <p className="text-[11.5px] text-[#6b7280] mb-2">This is how we decide what to pick up first.</p>
                   <div className="space-y-2">
                     {[
                       { id: 'blocked', title: "No — I'm completely stuck", desc: 'No way around it' },
@@ -254,8 +256,8 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                         key={op.id}
                         className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-all duration-150 ${
                           form.impact === op.id
-                            ? 'bg-[#1a2c47] border-[#3b82f6]'
-                            : 'bg-[#141b28] border-[#242e3f] hover:border-[#2e3a4e]'
+                            ? 'bg-[#2563eb]/15 border-[#2563eb]'
+                            : 'bg-[#111827] border-[#1f2937] hover:border-[#374151]'
                         }`}
                       >
                         <input
@@ -264,11 +266,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                           value={op.id}
                           checked={form.impact === op.id}
                           onChange={handleTextChange}
-                          className="mt-0.5 accent-[#3b82f6]"
+                          className="mt-0.5 accent-[#2563eb]"
                         />
                         <div>
-                          <div className="text-[13px] font-semibold text-[#e9edf3]">{op.title}</div>
-                          <div className="text-[11.5px] text-[#7b8697]">{op.desc}</div>
+                          <div className="text-[13px] font-semibold text-[#e5e7eb]">{op.title}</div>
+                          <div className="text-[11.5px] text-[#6b7280]">{op.desc}</div>
                         </div>
                       </label>
                     ))}
@@ -281,14 +283,14 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           {form.requestType === 'question' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   Which part of the platform?
                 </label>
                 <select
                   name="platformArea"
                   value={form.platformArea}
                   onChange={handleTextChange}
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb]"
                 >
                   <option value="">Not sure</option>
                   <option>Appointment booking</option>
@@ -306,14 +308,14 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           {form.requestType === 'workspace' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   What do you need set up? <span className="text-[#f87171]">*</span>
                 </label>
                 <select
                   name="workspaceKind"
                   value={form.workspaceKind}
                   onChange={handleTextChange}
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb]"
                 >
                   <option>A new workspace</option>
                   <option>A new channel in an existing workspace</option>
@@ -321,7 +323,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                 </select>
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   What should it be called? <span className="text-[#f87171]">*</span>
                 </label>
                 <input
@@ -330,11 +332,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   value={form.workspaceName}
                   onChange={handleTextChange}
                   placeholder="e.g. Bright Smile — South Clinic"
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
                 />
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   What will it be used for? <span className="text-[#f87171]">*</span>
                 </label>
                 <textarea
@@ -343,11 +345,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   value={form.workspaceUse}
                   onChange={handleTextChange}
                   placeholder="New clinic opening in September — needs its own booking calendar and reminders."
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6] resize-none"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] resize-none"
                 />
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   Needed by
                 </label>
                 <input
@@ -355,7 +357,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   name="neededBy"
                   value={form.neededBy}
                   onChange={handleTextChange}
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb]"
                 />
               </div>
             </div>
@@ -364,7 +366,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           {form.requestType === 'campaign' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   Campaign name <span className="text-[#f87171]">*</span>
                 </label>
                 <input
@@ -373,25 +375,25 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   value={form.campaignName}
                   onChange={handleTextChange}
                   placeholder="e.g. September check-up reminders"
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb]"
                 />
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-0.5">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-0.5">
                   What should it do? <span className="text-[#f87171]">*</span>
                 </label>
-                <p className="text-[11.5px] text-[#7b8697] mb-1.5">Who it goes to, what it should say, and what counts as success.</p>
+                <p className="text-[11.5px] text-[#6b7280] mb-1.5">Who it goes to, what it should say, and what counts as success.</p>
                 <textarea
                   name="campaignGoal"
                   rows={3}
                   value={form.campaignGoal}
                   onChange={handleTextChange}
                   placeholder="Text every patient who hasn't been in for 9 months, offering a check-up slot."
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#5a6474] focus:outline-none focus:border-[#3b82f6] resize-none"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] resize-none"
                 />
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   Go-live date
                 </label>
                 <input
@@ -399,7 +401,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   name="goLiveDate"
                   value={form.goLiveDate}
                   onChange={handleTextChange}
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb]"
                 />
               </div>
             </div>
@@ -408,14 +410,14 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           {form.requestType === 'other' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-[12.5px] font-semibold text-[#e9edf3] mb-1">
+                <label className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-1">
                   When do you need it?
                 </label>
                 <select
                   name="otherTimeframe"
                   value={form.otherTimeframe}
                   onChange={handleTextChange}
-                  className="w-full bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#3b82f6]"
+                  className="w-full bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-2.5 text-[13.5px] text-white focus:outline-none focus:border-[#2563eb]"
                 >
                   <option>No particular deadline</option>
                   <option>This week</option>
@@ -444,12 +446,12 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#3b82f6] hover:bg-[#2f74e8] text-white font-semibold py-3 px-4 rounded-xl shadow transition duration-150 disabled:opacity-50 text-[14px]"
+                className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold py-3 px-4 rounded-xl shadow transition duration-150 disabled:opacity-50 text-[14px]"
               >
                 {loading ? 'Submitting Ticket...' : 'Submit ticket'}
               </button>
 
-              <div className="text-center text-[11px] text-[#7b8697]">
+              <div className="text-center text-[11px] text-[#6b7280]">
                 A person reads every ticket. No bots replying.
               </div>
             </div>
@@ -464,18 +466,18 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           </div>
           <div>
             <h3 className="text-[17px] font-bold text-white">Thanks — we've got it</h3>
-            <p className="text-[12.8px] text-[#aab4c2] mt-1">It's with the support team now.</p>
+            <p className="text-[12.8px] text-[#9ca3af] mt-1">It's with the support team now.</p>
           </div>
 
-          <div className="inline-block bg-[#141b28] border border-[#242e3f] rounded-lg px-3.5 py-1.5 text-[14px] font-bold text-[#7cb5ff] tracking-wide">
+          <div className="inline-block bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-1.5 text-[14px] font-bold text-[#60a5fa] tracking-wide">
             {submittedRef}
           </div>
 
-          <div className="text-left bg-[#141b28] border border-[#242e3f] rounded-xl p-3.5 space-y-2 text-[12.3px] text-[#aab4c2]">
-            <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#3b82f6] before:rounded-full">
+          <div className="text-left bg-[#111827] border border-[#1f2937] rounded-xl p-3.5 space-y-2 text-[12.3px] text-[#9ca3af]">
+            <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#2563eb] before:rounded-full">
               <b className="text-white">A person will reply {ticketSla}</b>
             </div>
-            <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#3b82f6] before:rounded-full">
+            <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#2563eb] before:rounded-full">
               You'll get updates as it progresses.
             </div>
           </div>
@@ -483,13 +485,13 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
           <div className="flex flex-col gap-2 pt-2 sm:flex-row">
             <button
               onClick={() => onOpenChat(submittedRef)}
-              className="flex-1 bg-[#3b82f6] hover:bg-[#2f74e8] text-white font-semibold py-2.5 rounded-xl text-[13px] transition-all duration-150 flex justify-center items-center gap-1.5"
+              className="flex-1 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold py-2.5 rounded-xl text-[13px] transition-all duration-150 flex justify-center items-center gap-1.5"
             >
               Open Chat
             </button>
             <button
               onClick={resetForm}
-              className="flex-1 bg-[#1a2c47] hover:bg-[#223859] border border-[#3b82f6]/40 text-[#7cb5ff] font-semibold py-2.5 rounded-xl text-[13px] transition-all duration-150"
+              className="flex-1 bg-[#2563eb]/15 hover:bg-[#2563eb]/25 border border-[#2563eb]/40 text-[#60a5fa] font-semibold py-2.5 rounded-xl text-[13px] transition-all duration-150"
             >
               Submit another ticket
             </button>

@@ -39,6 +39,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   const feedRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const initialLoadDone = useRef(false);
+  const prevMessageCount = useRef(0);
 
   // Auto-resize textarea height dynamically based on content
   useEffect(() => {
@@ -79,6 +80,11 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         const data = await res.json();
         if (isMounted && res.ok && data.success) {
           setMessages(data.messages || []);
+          try {
+            localStorage.setItem(`ticket_read_${ticketRef}`, new Date().toISOString());
+          } catch {
+            // ignore
+          }
         }
       } catch {
         console.error("Failed to load messages");
@@ -93,6 +99,11 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
 
   useEffect(() => {
     let isMounted = true;
+    try {
+      localStorage.setItem(`ticket_read_${ticketRef}`, new Date().toISOString());
+    } catch {
+      // ignore
+    }
 
     const timer = setTimeout(() => {
       if (isMounted) {
@@ -114,12 +125,25 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     };
   }, [fetchTicketDetails, fetchMessages]);
 
-  // Scroll to bottom ONLY on first initial load (stops auto-jumping on polling)
+  // Scroll to bottom on initial load, and again whenever a new message arrives
+  // (but not if the user has scrolled up to read older history).
   useEffect(() => {
-    if (!loading && messages.length > 0 && !initialLoadDone.current) {
+    if (loading || messages.length === 0) return;
+
+    if (!initialLoadDone.current) {
       scrollToBottom();
       initialLoadDone.current = true;
+    } else if (messages.length > prevMessageCount.current) {
+      const feed = feedRef.current;
+      const distanceFromBottom = feed
+        ? feed.scrollHeight - feed.scrollTop - feed.clientHeight
+        : 0;
+      if (distanceFromBottom < 150) {
+        scrollToBottom();
+      }
     }
+
+    prevMessageCount.current = messages.length;
   }, [loading, messages, scrollToBottom]);
 
   const handleSendMessage = async (e?: React.FormEvent) => {

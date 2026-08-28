@@ -34,4 +34,6 @@ export interface TicketRecord {
   lead_phone: string | null;
   expected_behavior: string | null;
   created_at: string;
+  last_agent_message_at?: string | null;
+  agent_message_count?: number;
 }

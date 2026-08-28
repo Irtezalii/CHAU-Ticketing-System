@@ -60,19 +60,19 @@ export default function TicketList({
     <div className="p-5 sm:p-7 space-y-5 flex flex-col justify-between min-h-[520px] transition-opacity duration-150 ease-in-out">
       <div className="space-y-4">
         {/* List Header & Refresh Button */}
-        <div className="flex justify-between items-center border-b border-[#242e3f] pb-3">
+        <div className="flex justify-between items-center border-b border-[#1f2937] pb-3">
           <div>
             <h3 className="text-[15px] font-bold text-white">
               Submitted Tickets
             </h3>
-            <p className="text-[11.5px] text-[#7b8697]">
+            <p className="text-[11.5px] text-[#6b7280]">
               Track and manage all submitted requests
             </p>
           </div>
           <button
             onClick={onRefresh}
             disabled={fetchingTickets}
-            className="text-[11.5px] bg-[#141b28] hover:bg-[#1a2538] border border-[#242e3f] text-[#7cb5ff] px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50 font-medium whitespace-nowrap"
+            className="text-[11.5px] bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#60a5fa] px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50 font-medium whitespace-nowrap"
           >
             {fetchingTickets ? "Refreshing..." : "↻ Refresh"}
           </button>
@@ -80,7 +80,7 @@ export default function TicketList({
 
         {/* Sleek Wrapping Status Filter Bar */}
         <div className="flex flex-wrap items-center gap-1.5 py-1 pb-2 w-full">
-          <span className="text-[10px] font-mono tracking-widest text-[#64748b] font-bold uppercase pl-0.5 select-none mr-0.5">
+          <span className="text-[10px] font-mono tracking-widest text-[#6b7280] font-bold uppercase pl-0.5 select-none mr-0.5">
             STATUS
           </span>
 
@@ -144,21 +144,21 @@ export default function TicketList({
 
         {/* Dynamic Ticket State List */}
         {fetchingTickets && tickets.length === 0 ? (
-          <div className="py-12 text-center text-[13px] text-[#7b8697]">
+          <div className="py-12 text-center text-[13px] text-[#6b7280]">
             Loading tickets from D1 database...
           </div>
         ) : tickets.length === 0 ? (
-          <div className="py-12 text-center text-[#7b8697] space-y-2">
+          <div className="py-12 text-center text-[#6b7280] space-y-2">
             <p className="text-[14px]">No tickets submitted yet.</p>
             <button
               onClick={onSwitchToSubmit}
-              className="text-[12.5px] text-[#7cb5ff] hover:underline font-semibold"
+              className="text-[12.5px] text-[#60a5fa] hover:underline font-semibold"
             >
               Submit your first ticket
             </button>
           </div>
         ) : filteredTickets.length === 0 ? (
-          <div className="py-12 text-center text-[13px] text-[#7b8697]">
+          <div className="py-12 text-center text-[13px] text-[#6b7280]">
             No tickets found with status "
             <span className="text-white font-medium">{statusFilter}</span>".
           </div>
@@ -180,16 +180,16 @@ export default function TicketList({
 
       {/* Pagination Bar */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-[#242e3f] text-[12.5px] mt-auto">
+        <div className="flex items-center justify-between pt-4 border-t border-[#1f2937] text-[12.5px] mt-auto">
           <button
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="bg-[#141b28] hover:bg-[#1a2538] border border-[#242e3f] text-[#e9edf3] px-3.5 py-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+            className="bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#e5e7eb] px-3.5 py-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             ← Previous
           </button>
 
-          <span className="text-[#7b8697] font-medium">
+          <span className="text-[#6b7280] font-medium">
             Page <span className="text-white font-semibold">{currentPage}</span>{" "}
             of <span className="text-white font-semibold">{totalPages}</span>
           </span>
@@ -199,7 +199,7 @@ export default function TicketList({
               setCurrentPage((prev) => Math.min(prev + 1, totalPages))
             }
             disabled={currentPage === totalPages}
-            className="bg-[#141b28] hover:bg-[#1a2538] border border-[#242e3f] text-[#e9edf3] px-3.5 py-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+            className="bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#e5e7eb] px-3.5 py-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             Next →
           </button>

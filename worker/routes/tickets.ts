@@ -6,9 +6,14 @@ import type { Env, TicketRequestBody } from "../types";
 // ----------------------------------------------------
 export async function handleGetTickets(env: Env): Promise<Response> {
   try {
-    const { results } = await env.ticketing_db
-      .prepare("SELECT * FROM tickets ORDER BY id DESC")
-      .all();
+    const query = `
+      SELECT t.*,
+        (SELECT MAX(created_at) FROM ticket_messages WHERE (ticket_ref = t.ticket_ref OR ticket_ref = ('TK-' || t.id)) AND sender_role = 'agent') as last_agent_message_at,
+        (SELECT COUNT(*) FROM ticket_messages WHERE (ticket_ref = t.ticket_ref OR ticket_ref = ('TK-' || t.id)) AND sender_role = 'agent') as agent_message_count
+      FROM tickets t
+      ORDER BY t.id DESC
+    `;
+    const { results } = await env.ticketing_db.prepare(query).all();
 
     return Response.json({ success: true, tickets: results });
   } catch (error) {

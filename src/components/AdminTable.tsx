@@ -319,7 +319,7 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
           className={`px-3 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap border ${
             statusFilter === ''
               ? 'bg-[#2563eb] border-[#2563eb] text-white shadow-sm'
-              : 'bg-[#111827] border-[#1f2937] text-[#9ca3af] hover:border-[#3b82f6]/50 hover:text-white'
+              : 'bg-[#111827] border-[#1f2937] text-[#9ca3af] hover:border-[#2563eb]/50 hover:text-white'
           }`}
         >
           All Tickets

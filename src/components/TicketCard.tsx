@@ -5,6 +5,7 @@ import {
   STATUS_THEME,
 } from "../constants/ticket";
 import type { TicketRecord } from "../types/ticket";
+import { parseServerTimestamp } from "../utils/date";
 
 interface TicketCardProps {
   ticket: TicketRecord;
@@ -31,6 +32,24 @@ export default function TicketCard({
   const statusDot = STATUS_PILL_CONFIG[displayStatus]?.dot || "bg-[#94a3b8]";
 
   const isResolved = displayStatus === "Resolved";
+
+  // Check if there is an unread agent reply
+  const lastReadAt = typeof window !== 'undefined' ? localStorage.getItem(`ticket_read_${refStr}`) : null;
+  const hasUnreadReply = Boolean(
+    ticket.last_agent_message_at &&
+      (!lastReadAt ||
+        parseServerTimestamp(ticket.last_agent_message_at).getTime() >
+          new Date(lastReadAt).getTime())
+  );
+
+  const handleOpenChat = () => {
+    try {
+      localStorage.setItem(`ticket_read_${refStr}`, new Date().toISOString());
+    } catch {
+      // ignore
+    }
+    onOpenChat(refStr);
+  };
 
   const handleReopen = async () => {
     setIsReopening(true);
@@ -62,13 +81,31 @@ export default function TicketCard({
 
   return (
     <div
-      className={`bg-[#141b28] border border-[#242e3f] border-l-4 ${leftBorderColor} hover:border-[#2e3a4e] hover:${leftBorderColor} rounded-xl p-5 space-y-3 transition-all duration-150 shadow-sm flex flex-col`}
+      className={`bg-[#111827] border ${
+        hasUnreadReply
+          ? "border-[#f43f5e]/50 ring-1 ring-[#f43f5e]/40 shadow-[0_0_15px_rgba(244,63,94,0.12)]"
+          : "border-[#1f2937] hover:border-[#374151]"
+      } border-l-4 ${leftBorderColor} hover:${leftBorderColor} rounded-xl p-5 space-y-3 transition-all duration-150 shadow-sm flex flex-col`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <span className="text-[11px] font-bold tracking-wider text-[#7cb5ff] bg-[#3b82f6]/10 px-2.5 py-0.5 rounded border border-[#3b82f6]/20">
-            {refStr}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold tracking-wider text-[#60a5fa] bg-[#2563eb]/10 px-2.5 py-0.5 rounded border border-[#2563eb]/20">
+              {refStr}
+            </span>
+
+            {/* Glowing Red Blinking Unread Notification Badge */}
+            {hasUnreadReply && (
+              <span className="inline-flex items-center gap-1.5 bg-[#f43f5e]/15 border border-[#f43f5e]/50 text-[#fda4af] text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f43f5e] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f43f5e]"></span>
+                </span>
+                <span>NEW AGENT REPLY</span>
+              </span>
+            )}
+          </div>
+
           <h4 className="text-[14.5px] font-bold text-white pt-1 leading-snug">
             {ticket.subject}
           </h4>
@@ -84,7 +121,7 @@ export default function TicketCard({
         </span>
       </div>
 
-      <p className="text-[12.5px] text-[#c3cbd6] line-clamp-2 leading-relaxed">
+      <p className="text-[12.5px] text-[#d1d5db] line-clamp-2 leading-relaxed">
         {ticket.main_description || "No description provided."}
       </p>
 
@@ -94,19 +131,19 @@ export default function TicketCard({
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-3.5 border-t border-[#1e2736]">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#7b8697]">
+      <div className="flex items-center justify-between pt-3.5 border-t border-[#1f2937]">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6b7280]">
           <div>
-            <span className="text-[#aab4c2]">By:</span> {ticket.name}
+            <span className="text-[#9ca3af]">By:</span> {ticket.name}
           </div>
           <div>•</div>
           <div>
-            <span className="text-[#aab4c2]">Category:</span>{" "}
+            <span className="text-[#9ca3af]">Category:</span>{" "}
             {ticket.request_type}
           </div>
           <div>•</div>
           <div>
-            <span className="text-[#aab4c2]">Priority:</span> {ticket.priority}
+            <span className="text-[#9ca3af]">Priority:</span> {ticket.priority}
           </div>
         </div>
 
@@ -141,8 +178,12 @@ export default function TicketCard({
 
           <button
             type="button"
-            onClick={() => onOpenChat(refStr)}
-            className="text-[11.5px] bg-[#1d4ed8] hover:bg-[#1e40af] text-white font-semibold px-3 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+            onClick={handleOpenChat}
+            className={`text-[11.5px] font-semibold px-3 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ${
+              hasUnreadReply
+                ? "bg-[#e11d48] hover:bg-[#be123c] text-white ring-2 ring-[#f43f5e]/50 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+                : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
+            }`}
           >
             <svg
               width="14"
@@ -156,7 +197,7 @@ export default function TicketCard({
             >
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
-            View Chat
+            <span>{hasUnreadReply ? "View Reply" : "View Chat"}</span>
           </button>
         </div>
       </div>
