@@ -1,5 +1,7 @@
 export interface Env {
   ticketing_db: D1Database;
+  NOTION_API_KEY?: string;
+  NOTION_DATABASE_ID?: string;
 }
 
 interface TicketRequestBody {
@@ -35,8 +37,104 @@ interface MessageRequestBody {
 // AUTHENTICATION CONFIGURATION
 // ----------------------------------------------------
 const AUTHORIZED_USERS = ['ali', 'hammad', 'sabih', 'benji', 'steven', 'vic'];
-// In a production environment, this should ideally be an environment variable.
 const ADMIN_SECRET_TOKEN = 'super_secret_admin_token_123';
+
+// ----------------------------------------------------
+// NOTION HELPER FUNCTION
+// ----------------------------------------------------
+async function syncTicketToNotion(ticket: Record<string, any>, env: Env) {
+  if (!env.NOTION_API_KEY || !env.NOTION_DATABASE_ID) {
+    console.warn('Notion credentials missing in env; skipping Notion sync.');
+    return;
+  }
+
+  const ticketRef = ticket.ticket_ref || 'TK-UNKNOWN';
+  const subject = ticket.subject || 'No Subject';
+  const name = ticket.name || 'Unknown Submitter';
+  const email = ticket.email || 'N/A';
+  const requestType = ticket.request_type || 'General';
+  const priority = ticket.priority || 'Medium';
+  const mainDescription = ticket.main_description || 'No description provided.';
+
+  try {
+    const response = await fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        parent: { database_id: env.NOTION_DATABASE_ID },
+        properties: {
+  // 1. Page Title
+  Name: {
+    title: [
+      { text: { content: `${subject}` } }
+    ]
+  },
+  // 2. Priority (Select)
+  Priority: {
+    select: { name: priority }
+  },
+  // 3. Status (Status)
+  Status: {
+    status: { name: 'Not started' }
+  },
+  // 4. Category (Rich Text)
+  Category: {
+    select: { name: requestType }
+  },
+  // 5. Text (Rich Text for ticketRef)
+  Text: {
+    rich_text: [
+      { text: { content: `[${ticketRef}]` } }
+    ]
+  },
+  // 6. Submitted By (Email)
+  'Submitted By': {
+    email: email
+  }
+},
+        children: [
+          {
+            object: 'block',
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ text: { content: 'Ticket Details' } }]
+            }
+          },
+          {
+            object: 'block',
+            type: 'heading_3',
+            heading_3: {
+              rich_text: [{ text: { content: 'Main Description' } }]
+            }
+          },
+          {
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [{ text: { content: mainDescription } }]
+            }
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Failed to sync ticket to Notion:', errText);
+    } else {
+      console.log(`Successfully created Notion page for ${ticketRef}!`);
+    }
+  } catch (err) {
+    console.error('Error connecting to Notion API:', err);
+  }
+}
+
+
+
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -172,6 +270,11 @@ export default {
             body.otherTimeframe || null
           )
           .first();
+
+        // Trigger Notion Page Creation
+        if (insertedTicket) {
+          await syncTicketToNotion(insertedTicket, env);
+        }
 
         return Response.json(
           {

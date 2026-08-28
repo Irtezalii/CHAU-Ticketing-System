@@ -37,6 +37,23 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   const [sending, setSending] = useState(false);
 
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const initialLoadDone = useRef(false);
+
+  // Auto-resize textarea height dynamically based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
+    }
+  }, [newMessage]);
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback(() => {
+    if (feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, []);
 
   // Fetch Ticket Meta Details
   const fetchTicketDetails = useCallback(async (isMounted = true) => {
@@ -91,8 +108,16 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     };
   }, [fetchTicketDetails, fetchMessages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Scroll to bottom ONLY on first initial load (stops auto-jumping on polling)
+  useEffect(() => {
+    if (!loading && messages.length > 0 && !initialLoadDone.current) {
+      scrollToBottom();
+      initialLoadDone.current = true;
+    }
+  }, [loading, messages, scrollToBottom]);
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim() || sending) return;
 
     setSending(true);
@@ -103,18 +128,27 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         body: JSON.stringify({
           senderName: senderRole === 'user' ? (ticket?.name || 'Submitter') : 'Support Specialist',
           senderRole,
-          message: newMessage,
+          message: newMessage.trim(),
         }),
       });
 
       if (res.ok) {
         setNewMessage('');
-        void fetchMessages(true);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        await fetchMessages(true);
+        scrollToBottom(); // Auto-scroll on user action when sending a message
       }
     } catch {
       console.error('Failed to send message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSendMessage();
     }
   };
 
@@ -210,7 +244,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         </div>
       </div>
 
-      {/* Main Relative Container for Messages and Overlapping Glass Dropdown */}
+      {/* Main Relative Container */}
       <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
 
         {/* Accordion Toggle Bar */}
@@ -294,10 +328,10 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                     </span>
                   </div>
                   <div
-                    className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-[12.5px] leading-relaxed ${
-                      isMe
-                        ? 'bg-[#2563eb] text-white rounded-br-none shadow'
-                        : 'bg-[#111827] border border-[#1f2937] text-[#e5e7eb] rounded-bl-none'
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
+                    isMe
+                     ? 'bg-[#1e293b] text-white rounded-br-none shadow border border-[#1e293b]'
+                       : 'bg-[#111827] border border-[#1f2937] text-[#e5e7eb] rounded-bl-none'
                     }`}
                   >
                     {m.message}
@@ -309,11 +343,11 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         </div>
       </div>
 
-      {/* Input Bar */}
-      <form onSubmit={handleSendMessage} className="p-3 border-t border-[#1f2937] bg-[#0c1017] flex items-center gap-2.5 z-10 flex-shrink-0">
+      {/* Dynamic Expandable Input Bar with Hidden Scrollbar */}
+      <form onSubmit={handleSendMessage} className="p-3 border-t border-[#1f2937] bg-[#0c1017] flex items-end gap-2.5 z-10 flex-shrink-0">
         <button
           type="button"
-          className="text-[#6b7280] hover:text-[#9ca3af] p-1 transition cursor-pointer"
+          className="text-[#6b7280] hover:text-[#9ca3af] p-2 transition cursor-pointer mb-0.5"
           title="Attach file"
         >
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -321,18 +355,20 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
           </svg>
         </button>
 
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
+          rows={1}
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Write a message or paste an image..."
-          className="flex-1 bg-[#111827] border border-[#1f2937] rounded-full px-4 py-2 text-[12.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] transition"
+          onKeyDown={handleKeyDown}
+          placeholder="Talk to Support Agent"
+          className="flex-1 bg-[#111827] border border-[#1f2937] rounded-2xl px-4 py-2.5 text-[12.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] transition resize-none max-h-[140px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         />
 
         <button
           type="submit"
           disabled={sending || !newMessage.trim()}
-          className="w-9 h-9 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-40 text-white flex items-center justify-center transition cursor-pointer shadow flex-shrink-0"
+          className="w-10 h-10 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-40 text-white flex items-center justify-center transition cursor-pointer shadow flex-shrink-0 mb-0.5"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
