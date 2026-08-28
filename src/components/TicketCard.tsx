@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import { STATUS_BORDER_LEFT, STATUS_THEME } from '../constants/ticket';
-import type { TicketRecord } from '../types/ticket';
+import { useState } from "react";
+import {
+  STATUS_BORDER_LEFT,
+  STATUS_PILL_CONFIG,
+  STATUS_THEME,
+} from "../constants/ticket";
+import type { TicketRecord } from "../types/ticket";
 
 interface TicketCardProps {
   ticket: TicketRecord;
@@ -8,41 +12,49 @@ interface TicketCardProps {
   onTicketReopened?: () => void;
 }
 
-export default function TicketCard({ ticket, onOpenChat, onTicketReopened }: TicketCardProps) {
+export default function TicketCard({
+  ticket,
+  onOpenChat,
+  onTicketReopened,
+}: TicketCardProps) {
   const [isReopening, setIsReopening] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
 
   const refStr = ticket.ticket_ref || `TK-${ticket.id}`;
   const displayStatus =
-    ticket.status === 'OPEN' ? 'Not Started' : ticket.status || 'Not Started';
+    ticket.status === "OPEN" ? "Not Started" : ticket.status || "Not Started";
   const statusStyles =
     STATUS_THEME[displayStatus] ||
-    'bg-[#1f2937]/30 text-[#9ca3af] border-[#374151]';
+    "bg-[#1f2937]/30 text-[#9ca3af] border-[#374151]";
   const leftBorderColor =
-    STATUS_BORDER_LEFT[displayStatus] || 'border-l-[#64748b]';
+    STATUS_BORDER_LEFT[displayStatus] || "border-l-[#64748b]";
+  const statusDot = STATUS_PILL_CONFIG[displayStatus]?.dot || "bg-[#94a3b8]";
 
-  const isResolved = displayStatus === 'Resolved';
+  const isResolved = displayStatus === "Resolved";
 
   const handleReopen = async () => {
     setIsReopening(true);
     setReopenError(null);
     try {
-      const res = await fetch(`/api/tickets/${encodeURIComponent(refStr)}/reopen`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const res = await fetch(
+        `/api/tickets/${encodeURIComponent(refStr)}/reopen`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
       const data = await res.json();
       if (res.ok && data.success) {
         if (onTicketReopened) {
           onTicketReopened();
         }
       } else {
-        setReopenError(data.message || 'Failed to reopen ticket');
+        setReopenError(data.message || "Failed to reopen ticket");
       }
     } catch {
-      setReopenError('Network error while reopening ticket');
+      setReopenError("Network error while reopening ticket");
     } finally {
       setIsReopening(false);
     }
@@ -63,14 +75,17 @@ export default function TicketCard({ ticket, onOpenChat, onTicketReopened }: Tic
         </div>
 
         <span
-          className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border whitespace-nowrap ${statusStyles}`}
+          className={`text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full uppercase tracking-wider border whitespace-nowrap flex items-center gap-1.5 ${statusStyles}`}
         >
-          {displayStatus}
+          <span
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`}
+          />
+          <span>{displayStatus}</span>
         </span>
       </div>
 
       <p className="text-[12.5px] text-[#c3cbd6] line-clamp-2 leading-relaxed">
-        {ticket.main_description || 'No description provided.'}
+        {ticket.main_description || "No description provided."}
       </p>
 
       {reopenError && (
@@ -86,7 +101,7 @@ export default function TicketCard({ ticket, onOpenChat, onTicketReopened }: Tic
           </div>
           <div>•</div>
           <div>
-            <span className="text-[#aab4c2]">Category:</span>{' '}
+            <span className="text-[#aab4c2]">Category:</span>{" "}
             {ticket.request_type}
           </div>
           <div>•</div>
@@ -113,14 +128,14 @@ export default function TicketCard({ ticket, onOpenChat, onTicketReopened }: Tic
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={isReopening ? 'animate-spin' : ''}
+                className={isReopening ? "animate-spin" : ""}
               >
                 <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
                 <path d="M21 3v5h-5" />
                 <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
                 <path d="M8 16H3v5" />
               </svg>
-              <span>{isReopening ? 'Reopening...' : 'Reopen'}</span>
+              <span>{isReopening ? "Reopening..." : "Reopen"}</span>
             </button>
           )}
 
