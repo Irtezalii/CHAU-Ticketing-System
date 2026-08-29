@@ -1,8 +1,0 @@
-NOTION_API_KEY="ntn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-NOTION_DATABASE_ID="00000000000000000000000000000000"
-# Filled in after completing the Notion webhook verification handshake
-# (see worker/routes/webhooks.ts). Required to verify X-Notion-Signature
-# on incoming webhook events; without it, all webhook requests are rejected.
-NOTION_WEBHOOK_SECRET=""
-# Optional; falls back to a default in worker/config/auth.ts if unset.
-ADMIN_SECRET_TOKEN=""
