@@ -2,6 +2,7 @@ export interface Env {
   ticketing_db: D1Database;
   NOTION_API_KEY?: string;
   NOTION_DATABASE_ID?: string;
+  NOTION_WEBHOOK_SECRET?: string;
   ADMIN_SECRET_TOKEN?: string;
 }
 

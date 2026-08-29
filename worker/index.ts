@@ -7,11 +7,12 @@ import {
   handleReopenTicket,
 } from './routes/tickets';
 import { handleGetMessages, handleSendMessage } from './routes/messages';
+import { handleNotionWebhook } from './routes/webhooks';
 
 export type { Env };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
     const method = request.method;
@@ -21,6 +22,13 @@ export default {
     // ----------------------------------------------------
     if (method === 'POST' && pathname === '/api/admin/login') {
       return handleAdminLogin(request, env);
+    }
+
+    // ----------------------------------------------------
+    // WEBHOOKS: POST /api/webhooks/notion (Notion -> App)
+    // ----------------------------------------------------
+    if (method === 'POST' && pathname === '/api/webhooks/notion') {
+      return handleNotionWebhook(request, env, ctx);
     }
 
     // ----------------------------------------------------

@@ -1,3 +1,4 @@
+import { verifyAdminToken } from '../config/auth';
 import type { Env, MessageRequestBody } from '../types';
 
 // ----------------------------------------------------
@@ -38,8 +39,12 @@ export async function handleSendMessage(
 ): Promise<Response> {
   try {
     const body = (await request.json()) as MessageRequestBody;
-    const senderName = body.senderName?.trim() || 'Anonymous';
-    const senderRole = body.senderRole || 'user';
+    const isAdmin = verifyAdminToken(request, env);
+    // Role is derived from server-side admin auth, never trusted from the client,
+    // so a caller can't self-assign the "agent" role by editing the request body.
+    const senderRole = isAdmin ? 'agent' : 'user';
+    const senderName =
+      body.senderName?.trim() || (isAdmin ? 'Support Specialist' : 'Anonymous');
     const message = body.message?.trim();
 
     if (!message) {

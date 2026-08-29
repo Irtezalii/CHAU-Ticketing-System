@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { TicketRecord } from '../types/ticket';
 
-export function useTickets(activeTab: 'submit' | 'list', isAdminView: boolean) {
+export function useTickets(isAdminView: boolean) {
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [fetchingTickets, setFetchingTickets] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -30,7 +30,7 @@ export function useTickets(activeTab: 'submit' | 'list', isAdminView: boolean) {
   useEffect(() => {
     let isMounted = true;
 
-    if (activeTab === 'list' && !isAdminView) {
+    if (!isAdminView) {
       const load = async () => {
         if (!initialLoaded) setFetchingTickets(true);
         setFetchError(null);
@@ -62,7 +62,8 @@ export function useTickets(activeTab: 'submit' | 'list', isAdminView: boolean) {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, initialLoaded, isAdminView]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminView]);
 
   return {
     tickets,

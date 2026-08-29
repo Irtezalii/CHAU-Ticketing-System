@@ -33,8 +33,14 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
-  const [senderRole, setSenderRole] = useState<"user" | "agent">("user");
   const [sending, setSending] = useState(false);
+
+  // Agent vs. user is determined by whether this browser is logged into the
+  // admin panel, not by a self-selectable toggle -- the server independently
+  // re-verifies the admin token before ever recording a message as "agent".
+  const adminToken = localStorage.getItem("admin_token");
+  const isAdmin = Boolean(adminToken);
+  const senderRole: "user" | "agent" = isAdmin ? "agent" : "user";
 
   const feedRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -154,13 +160,16 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     try {
       const res = await fetch(`/api/tickets/${ticketRef}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(isAdmin && adminToken
+            ? { Authorization: `Bearer ${adminToken}` }
+            : {}),
+        },
         body: JSON.stringify({
-          senderName:
-            senderRole === "user"
-              ? ticket?.name || "Submitter"
-              : "Support Specialist",
-          senderRole,
+          senderName: isAdmin
+            ? localStorage.getItem("admin_user") || "Support Specialist"
+            : ticket?.name || "Submitter",
           message: newMessage.trim(),
         }),
       });
@@ -256,33 +265,6 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Dev Role Toggle */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-[#161f2e] border border-[#2d3a4e] p-1 rounded-lg text-[10px]">
-            <span className="text-[#6b7280] px-1">Role:</span>
-            <button
-              type="button"
-              onClick={() => setSenderRole("user")}
-              className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${
-                senderRole === "user"
-                  ? "bg-[#2563eb] text-white"
-                  : "text-[#9ca3af]"
-              }`}
-            >
-              User
-            </button>
-            <button
-              type="button"
-              onClick={() => setSenderRole("agent")}
-              className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${
-                senderRole === "agent"
-                  ? "bg-[#f59e0b] text-[#3d2a06]"
-                  : "text-[#9ca3af]"
-              }`}
-            >
-              Agent
-            </button>
-          </div>
-
           <span className="bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/30 text-[9.5px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase">
             ONLINE
           </span>

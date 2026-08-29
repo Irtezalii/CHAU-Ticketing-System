@@ -33,6 +33,7 @@ export interface TicketRecord {
   main_description: string | null;
   lead_phone: string | null;
   expected_behavior: string | null;
+  notion_page_id?: string | null;
   created_at: string;
   last_agent_message_at?: string | null;
   agent_message_count?: number;

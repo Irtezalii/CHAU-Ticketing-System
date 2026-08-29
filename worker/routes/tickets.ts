@@ -113,9 +113,21 @@ export async function handleCreateTicket(
       )
       .first();
 
-    // Trigger Notion Page Creation asynchronously
+    // Trigger Notion Page Creation and remember the page id so
+    // Notion webhook events can be matched back to this ticket later.
     if (insertedTicket) {
-      await syncTicketToNotion(insertedTicket, env);
+      const notionPageId = await syncTicketToNotion(insertedTicket, env);
+      if (notionPageId) {
+        try {
+          await env.ticketing_db
+            .prepare("UPDATE tickets SET notion_page_id = ? WHERE id = ?")
+            .bind(notionPageId, (insertedTicket as Record<string, any>).id)
+            .run();
+          (insertedTicket as Record<string, any>).notion_page_id = notionPageId;
+        } catch (err) {
+          console.error("Failed to store notion_page_id for ticket:", err);
+        }
+      }
     }
 
     return Response.json(

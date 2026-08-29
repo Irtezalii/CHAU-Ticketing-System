@@ -3,6 +3,7 @@ import {
   isAuthorizedUser,
   verifyAdminToken,
 } from "../config/auth";
+import { updateNotionPage } from "../services/notion";
 import type { Env } from "../types";
 
 // ----------------------------------------------------
@@ -92,6 +93,14 @@ export async function handleAdminUpdateTicket(
         .prepare(statusMsgQuery)
         .bind(exactRef, `Status changed to ${status}`)
         .run();
+    }
+
+    // Push the change to Notion so both sides stay in sync. D1 has already
+    // been updated above, so if this same change echoes back through the
+    // Notion webhook, the values will already match and no-op there.
+    const notionPageId = (updated as Record<string, any> | null)?.notion_page_id;
+    if (notionPageId && (status || priority)) {
+      await updateNotionPage(notionPageId, { status, priority }, env);
     }
 
     return Response.json({ success: true, ticket: updated });

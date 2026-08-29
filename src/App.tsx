@@ -21,10 +21,8 @@ export default function App() {
   });
 
   // Custom hook handles all fetching state & API logic
-  const { tickets, fetchingTickets, fetchError, fetchTickets } = useTickets(
-    activeTab,
-    isAdminView,
-  );
+  const { tickets, fetchingTickets, fetchError, fetchTickets } =
+    useTickets(isAdminView);
 
   // Compute unread agent replies count
   const unreadCount = tickets.filter((t) => {
