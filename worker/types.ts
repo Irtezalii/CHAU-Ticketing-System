@@ -4,6 +4,9 @@ export interface Env {
   NOTION_DATABASE_ID?: string;
   NOTION_WEBHOOK_SECRET?: string;
   ADMIN_SECRET_TOKEN?: string;
+  SENDGRID_API_KEY?: string;
+  SENDGRID_FROM_EMAIL?: string;
+  SENDGRID_FROM_NAME?: string;
 }
 
 export interface TicketRequestBody {

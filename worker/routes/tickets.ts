@@ -1,4 +1,5 @@
 import { syncTicketToNotion } from "../services/notion";
+import { sendTicketConfirmationEmail } from "../services/sendgrid";
 import type { Env, TicketRequestBody } from "../types";
 
 // ----------------------------------------------------
@@ -128,6 +129,15 @@ export async function handleCreateTicket(
           console.error("Failed to store notion_page_id for ticket:", err);
         }
       }
+
+      const exactRef =
+        (insertedTicket as Record<string, any>).ticket_ref || ticketRef;
+      const ticketUrl = `${new URL(request.url).origin}/ticket/${encodeURIComponent(exactRef)}`;
+      await sendTicketConfirmationEmail(
+        insertedTicket as Record<string, any>,
+        ticketUrl,
+        env,
+      );
     }
 
     return Response.json(

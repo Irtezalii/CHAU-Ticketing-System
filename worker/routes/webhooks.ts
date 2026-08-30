@@ -7,6 +7,7 @@ import {
   fetchNotionUserName,
   verifyNotionSignature,
 } from "../services/notion";
+import { sendTicketResolvedEmail } from "../services/sendgrid";
 import {
   mapNotionPriorityToAppPriority,
   mapNotionStatusToAppStatus,
@@ -59,9 +60,11 @@ export async function handleNotionWebhook(
     return Response.json({ success: false, message: "Invalid signature" }, { status: 401 });
   }
 
+  const origin = new URL(request.url).origin;
+
   switch (parsed.type) {
     case "page.properties_updated":
-      ctx.waitUntil(handlePagePropertiesUpdated(parsed, env));
+      ctx.waitUntil(handlePagePropertiesUpdated(parsed, env, origin));
       break;
     case "comment.created":
       ctx.waitUntil(handleCommentCreated(parsed, env));
@@ -76,6 +79,7 @@ export async function handleNotionWebhook(
 async function handlePagePropertiesUpdated(
   event: NotionWebhookEvent,
   env: Env,
+  origin: string,
 ): Promise<void> {
   const pageId = event.entity?.id;
   if (!pageId) return;
@@ -132,6 +136,13 @@ async function handlePagePropertiesUpdated(
       )
       .bind(exactRef, message)
       .run();
+  }
+
+  // Only notify on an actual transition into Resolved, not every property
+  // update event that happens to re-report an already-resolved status.
+  if (statusChanged && mappedStatus === "Resolved") {
+    const ticketUrl = `${origin}/ticket/${encodeURIComponent(exactRef)}`;
+    await sendTicketResolvedEmail({ ...ticket, status: mappedStatus }, ticketUrl, env);
   }
 }
 

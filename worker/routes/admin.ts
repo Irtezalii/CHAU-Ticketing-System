@@ -4,6 +4,7 @@ import {
   verifyAdminToken,
 } from "../config/auth";
 import { updateNotionPage } from "../services/notion";
+import { sendTicketResolvedEmail } from "../services/sendgrid";
 import type { Env } from "../types";
 
 // ----------------------------------------------------
@@ -61,6 +62,12 @@ export async function handleAdminUpdateTicket(
     const assignee = body.assignee;
     const priority = body.priority;
 
+    const existing = await env.ticketing_db
+      .prepare("SELECT status FROM tickets WHERE ticket_ref = ? OR id = ?")
+      .bind(ticketRef, ticketRef)
+      .first<{ status: string }>();
+    const previousStatus = existing?.status;
+
     const query = `
       UPDATE tickets
       SET status = COALESCE(?, status),
@@ -101,6 +108,15 @@ export async function handleAdminUpdateTicket(
     const notionPageId = (updated as Record<string, any> | null)?.notion_page_id;
     if (notionPageId && (status || priority)) {
       await updateNotionPage(notionPageId, { status, priority }, env);
+    }
+
+    // Only notify on an actual transition into Resolved, not every PATCH
+    // that happens to re-send an already-resolved status.
+    if (status === "Resolved" && previousStatus !== "Resolved" && updated) {
+      const updatedTicket = updated as Record<string, any>;
+      const exactRef = updatedTicket.ticket_ref || ticketRef;
+      const ticketUrl = `${new URL(request.url).origin}/ticket/${encodeURIComponent(exactRef)}`;
+      await sendTicketResolvedEmail(updatedTicket, ticketUrl, env);
     }
 
     return Response.json({ success: true, ticket: updated });

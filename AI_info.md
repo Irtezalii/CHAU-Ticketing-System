@@ -6,26 +6,25 @@ This document contains the complete project context, current architecture, lesso
 
 Use this as context for any AI coding agent that needs to continue development from the current state.
 
+**Last updated:** 2026-08-29, after adding two-way Notion sync, fixing a chat role-spoofing security hole, fixing a ticket-count display bug, and adding SendGrid transactional emails (ticket-received + ticket-resolved). Update this section's date whenever this file is revised.
+
 ---
 
 # 1. Project Overview
 
 **Project:** Ticketing System
 
-**Description:** A full-stack customer support ticketing system built with React, TypeScript, Tailwind CSS, Cloudflare Workers, and Cloudflare D1.
+**Description:** A full-stack customer support ticketing system built with React, TypeScript, Tailwind CSS, Cloudflare Workers, and Cloudflare D1, with two-way sync to a Notion database used as the team's internal ticket board.
 
-**Current stage:** Foundation is complete. The ticket form works, the Cloudflare Worker API works, local D1 is configured and migrated, Tailwind is installed, and production builds work.
+**Current stage:** The core product is built and functional locally: ticket submission, persistence, a customer-facing ticket chat, an admin dashboard with token-based auth, a two-way Notion sync (App creates/updates Notion pages; Notion status/priority changes and comments sync back into the app), and SendGrid transactional emails (ticket received + ticket resolved). The project has **never been deployed to Cloudflare** — everything so far has run against local D1 and a local `wrangler dev` instance (tested live via a temporary `cloudflared` tunnel for Notion webhook delivery).
 
-The immediate focus is:
+Remaining major items:
 
-1. Finish the polished ticket form UI.
-2. Persist submitted tickets into D1.
-3. Build ticket APIs.
-4. Build customer ticket/conversation experience.
-5. Build support/admin dashboard.
-6. Add live group chat between customer and support/backend team.
-7. Add authentication and authorization.
-8. Deploy to Cloudflare production.
+1. First production deployment (`wrangler deploy` + push secrets + re-point the Notion webhook subscription at the permanent URL).
+2. **SendGrid domain authentication** — emails currently send successfully but show an "unverified sender" warning in Outlook/Gmail because only Single Sender Verification is set up, not full Domain Authentication (DKIM/SPF DNS records). See Section 12.
+3. Real-time/notification support so an admin reply surfaces to the customer without them needing the tab open and polling (not yet built — approach not yet chosen; options discussed: browser Notifications API, in-page toast, or true Web Push).
+4. Broader authentication (current admin auth is a single shared Bearer token + a hardcoded username allowlist, not per-user accounts).
+5. Attachments, search/filtering polish, pagination.
 
 ---
 
@@ -39,207 +38,119 @@ The developer already knows React sufficiently.
 - Learn by building the actual application.
 - Keep explanations practical and related to the current task.
 - Give exact files and code changes.
-- Give exact Windows CMD commands when commands are needed.
-- Work incrementally.
-- Make one logical change at a time.
-- Test it.
-- Verify it.
-- Commit meaningful milestones to Git.
+- Give exact Windows commands when commands are needed (this project is developed on Windows; PowerShell and Git Bash are both in play — check which one is active before assuming syntax).
+- Work incrementally, one logical change at a time.
+- Test it. Verify it against the real running app/API, not just a type-check, before calling it done.
+- Commit meaningful milestones to Git (only when explicitly asked to commit).
 - Then continue.
 
 ## Do Not
 
-- Do not recreate the project.
-- Do not restart the architecture.
+- Do not recreate the project or restart the architecture.
 - Do not replace Cloudflare Workers/D1 without a strong reason.
 - Do not dump huge amounts of unrelated code.
-- Do not assume something works without verification.
+- Do not assume something works without verification — this project has real Notion credentials/workspace (Section 11) and a real SendGrid account (Section 12) wired up; test against them directly rather than guessing.
 - Do not jump several roadmap steps ahead when the developer is working on the current step.
+- Do not add scope beyond what was asked (e.g. don't build a notification system, extra abstractions, or "nice to have" refactors unless requested).
 
 ---
 
 # 3. Technology Stack
 
 ## Frontend
-
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- Custom CSS where appropriate
+- React 19, TypeScript, Vite 8, Tailwind CSS v4 (`@tailwindcss/vite`)
 
 ## Backend
-
-- Cloudflare Workers
-- TypeScript
+- Cloudflare Workers, TypeScript — **plain Workers, no framework** (no Hono). Routing is manual `pathname`/regex matching in `worker/index.ts`.
 
 ## Database
+- Cloudflare D1 (SQLite-compatible)
 
-- Cloudflare D1
-- SQLite-compatible
+## External integrations
+- Notion API (raw `fetch`, **not** the `@notionhq/client` SDK — kept consistent with the rest of the codebase's style) for two-way ticket sync. See Section 11.
+- SendGrid (raw `fetch` to the v3 REST API, **not** the `@sendgrid/mail` npm package — that package needs Node's `https` module, which doesn't exist in the Workers runtime, so raw `fetch` isn't just a style choice here, it's required) for transactional email. See Section 12.
 
 ## Deployment
-
-- Cloudflare
-- Wrangler
+- Cloudflare Workers + Wrangler 4. Uses `@cloudflare/vite-plugin`, so `npm run dev` runs Vite with an embedded Workers runtime; `npm run build` produces both the client assets and the Worker bundle under `dist/`.
 
 ## Version Control
-
 - Git
 
 ---
 
 # 4. Project Location
 
-Windows project directory:
-
-```text
-F:\Ticketing Cloudflare system\ticketing-system
-```
-
-Current working directory:
-
 ```text
 F:\Ticketing Cloudflare system\ticketing-system
 ```
 
 ---
 
-# 5. Important Project Files
+# 5. Actual Current Project Structure
 
 ```text
 ticketing-system/
 ├── src/
-│   ├── App.tsx
-│   ├── App.css
-│   ├── index.css
+│   ├── App.tsx                  — top-level view routing (submit/list/admin/chat), ticket count + unread badge
+│   ├── App.css / index.css
 │   ├── main.tsx
-│   └── assets/
+│   ├── hooks/
+│   │   └── useTickets.ts        — fetches /api/tickets; fetches on mount for the whole customer view (NOT gated by active tab — see Section 13 bugfix)
+│   ├── components/
+│   │   ├── Header.tsx
+│   │   ├── TicketForm.tsx       — ticket submission form, derives priority from request type + impact
+│   │   ├── TicketList.tsx       — customer's "My Tickets" list
+│   │   ├── TicketCard.tsx
+│   │   ├── TicketChat.tsx       — per-ticket chat UI (shared by customer view AND admin's chat view)
+│   │   └── AdminTable.tsx       — admin dashboard: login, ticket table, status/assignee editing
+│   ├── constants/ticket.ts      — STATUS_THEME, STATUS_PILL_CONFIG, SLA_MAP, INITIAL_FORM
+│   ├── types/ticket.ts          — TicketRecord, FormState
+│   └── utils/date.ts
 │
 ├── worker/
-│   └── index.ts
+│   ├── index.ts                 — entry point; manual route matching; fetch(request, env, ctx)
+│   ├── types.ts                 — Env interface, request body types
+│   ├── config/
+│   │   ├── auth.ts               — AUTHORIZED_USERS allowlist, admin token check
+│   │   └── notionMappings.ts     — Notion status/priority option-name <-> app value mapping
+│   ├── routes/
+│   │   ├── tickets.ts            — GET/POST /api/tickets (creates Notion page + sends confirmation email), GET /api/tickets/:ref, reopen
+│   │   ├── admin.ts              — POST /api/admin/login, PATCH /api/tickets/:ref (protected; pushes to Notion + sends resolved email on transition to Resolved)
+│   │   ├── messages.ts           — GET/POST /api/tickets/:ref/messages
+│   │   └── webhooks.ts           — POST /api/webhooks/notion (Notion -> App; also sends resolved email on Notion-driven transition to Resolved)
+│   └── services/
+│       ├── notion.ts             — all Notion HTTP calls: create page, update page, fetch page/comment/user, webhook signature verification
+│       └── sendgrid.ts           — sendTicketConfirmationEmail(), sendTicketResolvedEmail(), shared sendEmail() core
 │
 ├── migrations/
-│   └── 0001_create_tickets.sql
+│   ├── 0001_create_tickets.sql
+│   ├── 0002_expanded_create_ticket.sql
+│   ├── 0002_create_messages.sql
+│   ├── 0003_add_admin_fields.sql
+│   ├── 0003_add_lead_phone.sql
+│   └── 0004_add_notion_sync_fields.sql
 │
-├── public/
-│
+├── .dev.vars                     — local secrets (NOTION_API_KEY, NOTION_DATABASE_ID, NOTION_WEBHOOK_SECRET, SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME); gitignored. No .dev.vars.example (removed as redundant) -- .dev.vars itself is the reference for what vars exist.
 ├── package.json
-├── package-lock.json
 ├── vite.config.ts
 ├── wrangler.jsonc
 ├── worker-configuration.d.ts
-├── tsconfig.json
-├── tsconfig.app.json
-├── tsconfig.node.json
-└── tsconfig.worker.json
+└── tsconfig*.json
 ```
+
+There is **no Hono, no KV, no R2, no Durable Objects, and no cron trigger** anywhere in this project. Real-time-ish behavior (chat messages, ticket list unread badges) is done by **polling** (`TicketChat.tsx` polls `/api/tickets/:ref/messages` every 3 seconds), not WebSockets. If a future task asks for true real-time push, that would be new infrastructure, not something already half-built.
 
 ---
 
-# 6. Initial Project Setup
-
-The project was created using a Cloudflare Vite React template.
-
-Stack:
-
-```text
-React
-TypeScript
-Vite
-Cloudflare Workers
-```
-
-ESLint was selected as the linter.
-
-The local development server works:
-
-```text
-http://localhost:5173/
-```
-
----
-
-# 7. Git Setup
-
-Git was initialized already.
-
-Do NOT run:
-
-```cmd
-git init
-```
-
-again.
-
-## Initial commit
-
-```text
-Commit: 89213aa
-Message: Initial Cloudflare React project
-```
-
-## Second commit
-
-```text
-Commit: 202ab89
-Message: Add ticket form and ticket API
-```
-
-Git identity was configured as:
-
-```text
-Name: Irtaza Ali
-Email: aujali786@gmail.com
-```
-
-## Normal Git workflow
-
-```cmd
-git status
-git add <changed files>
-git commit -m "Clear description"
-git status
-```
-
----
-
-# 8. Cloudflare Setup
-
-Wrangler login was completed successfully.
-
-Cloudflare skills installation prompt was accepted.
-
-Cloudflare D1 was created successfully.
-
-## D1 Database
-
-```text
-Database name: ticketing-db
-Binding: ticketing_db
-Region: WEUR
-Database ID: 388cf420-533a-46cd-959f-a8a4b41413f2
-```
-
-The D1 binding is configured in `wrangler.jsonc`.
-
----
-
-# 9. Wrangler Configuration
-
-Important configuration:
+# 6. Wrangler Configuration
 
 ```jsonc
 {
   "name": "ticketing-system",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-20",
-  "assets": {
-    "not_found_handling": "single-page-application"
-  },
-  "observability": {
-    "enabled": true
-  },
+  "assets": { "not_found_handling": "single-page-application" },
+  "observability": { "enabled": true },
   "upload_source_maps": true,
   "d1_databases": [
     {
@@ -251,1232 +162,238 @@ Important configuration:
 }
 ```
 
----
+No `vars` block — `NOTION_API_KEY`, `NOTION_DATABASE_ID`, `NOTION_WEBHOOK_SECRET`, `ADMIN_SECRET_TOKEN`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, and `SENDGRID_FROM_NAME` are all treated as **secrets**, not plain vars, in every environment. Locally they come from `.dev.vars`; in production they must be pushed individually with `wrangler secret put <NAME>` — **deploying does NOT read `.dev.vars`**.
 
-# 10. Local D1 vs Remote D1
-
-This is important.
-
-The project was configured so local development uses a local D1 resource.
-
-Use:
-
-```cmd
---local
-```
-
-during development.
-
-Use:
-
-```cmd
---remote
-```
-
-only when intentionally querying or modifying the real Cloudflare production D1 database.
-
-Conceptually:
-
-```text
-                 D1
-                  |
-        +---------+---------+
-        |                   |
-      LOCAL               REMOTE
-        |                   |
-   Development          Production
-```
-
-Do not accidentally modify production while testing.
+**This Worker has never been deployed.** Running `wrangler deployments list` returns "This Worker does not exist on your account" as of the last check. First deploy will be `npm run build && wrangler deploy`, immediately followed by pushing all seven secrets above.
 
 ---
 
-# 11. Local D1 Storage
+# 7. Local D1 vs Remote D1
 
-Wrangler manages the local database under:
-
-```text
-.wrangler\state\v3\d1
-```
-
-Do not manually edit or manipulate the underlying database files.
-
-Use Wrangler commands and SQL instead.
-
----
-
-# 12. Database Migration
-
-Migration directory:
-
-```text
-migrations
-```
-
-First migration:
-
-```text
-migrations/0001_create_tickets.sql
-```
-
-Current migration:
-
-```sql
-CREATE TABLE tickets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    request_type TEXT NOT NULL,
-    priority TEXT NOT NULL DEFAULT 'Medium',
-    description TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'OPEN',
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-The migration was successfully applied locally.
-
-Do not modify an already-applied migration for future schema changes.
-
-Create a new migration instead.
-
-Example:
-
-```text
-migrations/0002_add_something.sql
-```
-
----
-
-# 13. D1 Commands Learned
-
-## Apply local migrations
+Same as before — use `--local` for all day-to-day development, `--remote` only when intentionally touching the real Cloudflare D1. Local D1 storage lives under `.wrangler\state\v3\d1` — never edit it directly, always go through `wrangler d1 execute` / `migrations apply`.
 
 ```cmd
 npx wrangler d1 migrations apply ticketing-db --local
-```
-
-## List tables
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="SELECT name FROM sqlite_master WHERE type='table';"
-```
-
-## Inspect ticket schema
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="PRAGMA table_info(tickets);"
-```
-
-## View tickets
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="SELECT * FROM tickets;"
-```
-
-## View latest tickets
-
-```cmd
 npx wrangler d1 execute ticketing-db --local --command="SELECT * FROM tickets ORDER BY id DESC;"
 ```
 
-## Count tickets
+---
+
+# 8. Current Database Schema
+
+## `tickets`
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| ticket_ref | TEXT | e.g. `TK-1234`; the human-facing ID used in URLs and Notion |
+| name, email, subject, request_type | TEXT | required at submission |
+| priority | TEXT | `Urgent` \| `High` \| `Medium` \| `Low`, default `Medium` |
+| status | TEXT | default `OPEN` on create; admin/Notion transitions use the six-value set in `STATUS_OPTIONS` (`Not Started`, `Initial Response`, `In Progress`, `Waiting on Client`, `Completed by Dev`, `Resolved`) — see Section 11 for how `OPEN` and `Not Started` relate |
+| description, main_description, expected_behavior, impact | TEXT | |
+| callback_phone, lead_phone | TEXT | |
+| platform_area, workspace_kind, workspace_name, workspace_use, needed_by, campaign_name, campaign_goal, go_live_date, timeframe | TEXT | form-specific fields, all nullable |
+| assignee | TEXT | default `Unassigned` |
+| **notion_page_id** | TEXT | added in migration 0004; links this row to its Notion page. Indexed. |
+| created_at, updated_at | TEXT | |
+
+## `ticket_messages`
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| ticket_ref | TEXT | |
+| sender_name | TEXT | |
+| sender_role | TEXT | `'user' \| 'agent' \| 'system'` — **`agent` can only be set server-side by a verified admin token**, never trusted from the client (see Section 13) |
+| message | TEXT | |
+| **notion_comment_id** | TEXT, UNIQUE where not null | added in migration 0004; dedupes retried Notion `comment.created` webhook deliveries |
+| created_at | TEXT | |
+
+Never modify an already-applied migration. Add a new `migrations/000N_description.sql` for schema changes.
+
+---
+
+# 9. API Surface (current, not planned)
+
+```text
+POST   /api/admin/login              — { username } -> { token } if in AUTHORIZED_USERS allowlist
+GET    /api/tickets                  — all tickets, with agent-message aggregates for the unread badge
+POST   /api/tickets                  — create ticket; also creates the Notion page (stores notion_page_id) and sends the SendGrid "ticket received" confirmation email
+GET    /api/tickets/:ref             — single ticket (matches ticket_ref OR numeric id)
+PATCH  /api/tickets/:ref             — admin-only (Bearer token); updates status/assignee/priority in D1, pushes status/priority to the linked Notion page, and sends the SendGrid "ticket resolved" email if status transitions to Resolved
+POST   /api/tickets/:ref/reopen      — public; sets status back to 'In Progress'
+GET    /api/tickets/:ref/messages    — chat history
+POST   /api/tickets/:ref/messages    — send a chat message; sender_role is derived from admin auth, not the request body
+POST   /api/webhooks/notion          — Notion -> App webhook receiver (see Section 11)
+```
+
+Admin auth is a single shared secret: `Authorization: Bearer <ADMIN_SECRET_TOKEN>` (falls back to the hardcoded `super_secret_admin_token_123` in `worker/config/auth.ts` if the env var isn't set — **only acceptable for local dev, must be set as a real secret before production**). Login just checks the username against a hardcoded list (`AUTHORIZED_USERS` in the same file) and hands back that shared token — there is no per-user password or session, so don't describe this as "real" authentication if asked to reason about security posture.
+
+---
+
+# 10. Admin Dashboard, Ticket Details & Chat — already built
+
+`AdminTable.tsx` (login screen + ticket table with status/assignee inline editing, search, status-filter tabs with counts) and `TicketChat.tsx` (shared chat UI, opened both from the customer's ticket link `/ticket/:ref` and from the admin table's "open chat" action) are both implemented, not planned. `App.tsx` does simple pathname-based view routing (`/admin`, `/ticket/:ref`, or the default submit/list view) with `window.history.pushState`, no router library.
+
+Known characteristics worth knowing before changing this area:
+- Chat polls every 3 seconds (`setInterval` in `TicketChat.tsx`) — no WebSockets/SSE.
+- `TicketChat` determines agent-vs-user purely from `localStorage.getItem('admin_token')` in the current browser — see Section 13 for why the role can't be spoofed even though this client-side check exists.
+- The unread-message badge and "My Tickets" count in `App.tsx` are both derived from the same `tickets` array populated by `useTickets` — see Section 13 for a bug that used to make both show `0` incorrectly.
+
+---
+
+# 11. Notion Integration (two-way sync) — major feature, read this before touching it
+
+## Direction 1: App -> Notion (ticket creation)
+
+`worker/services/notion.ts` → `syncTicketToNotion()`. Raw `fetch` (not the SDK) to `POST https://api.notion.com/v1/pages`, called from `handleCreateTicket` in `worker/routes/tickets.ts` right after the D1 insert. The returned page id is stored back into `tickets.notion_page_id` — **this link is what makes the reverse direction possible; if it's ever missing/null for a ticket, none of the sync below applies to it.**
+
+Property mapping on create: `Name` (title) = subject, `Priority` (select) = `ticket.priority` verbatim, `Status` (status) = hardcoded `"Not started"`, `Category` (select) = request_type, `Text` (rich_text) = `[TICKET_REF]`, `Submitted By` (email).
+
+## Direction 2: App -> Notion (admin edits)
+
+`worker/services/notion.ts` → `updateNotionPage()`, called from `handleAdminUpdateTicket` in `worker/routes/admin.ts` after the D1 write. PATCHes the Notion page's `Status`/`Priority` properties to match whatever was just set in D1.
+
+**Important Notion API quirk:** Notion's `status`-type property (unlike `select`) does **not** auto-create missing options via the API — if you push a status string that isn't already a configured option in the live Notion database, the PATCH fails (logged, not surfaced to the UI), and D1/Notion can drift until an unrelated Notion-side edit reconciles it. All six app status values were confirmed to already exist as options in the live "Chau Ticketing Dasboard" integration's database as of this writing. If a new status value is ever added to `STATUS_OPTIONS` in `AdminTable.tsx`, a matching option must be added in Notion too.
+
+## Direction 3: Notion -> App (webhooks)
+
+`worker/routes/webhooks.ts` → `handleNotionWebhook()`, mounted at `POST /api/webhooks/notion` in `worker/index.ts`. This is **webhook-driven, not polling** — near-instant in practice (a few seconds), though Notion aggregates/batches `page.properties_updated` events over a short window if several property edits happen back-to-back.
+
+Handles two event types:
+- `page.properties_updated` → re-fetches the full page via `GET /v1/pages/{id}`, maps Notion's `Status`/`Priority` option names back to app values via `worker/config/notionMappings.ts`, and only writes to D1 (+ inserts a `system` timeline message) if the mapped value actually differs from the current D1 value. **This diff-before-write behavior is also the loop-prevention mechanism for Direction 2** — when App->Notion push (Direction 2) causes Notion to echo the same value back via this webhook, the values already match, so nothing happens. No explicit "last synced by us" flag was needed; this was verified live.
+- `comment.created` → looks up the ticket by `notion_page_id`, fetches the comment via `GET /v1/comments?block_id={page_id}`, resolves the commenter's name via `GET /v1/users/{id}`, and inserts a `ticket_messages` row with `sender_role='agent'` and `notion_comment_id` set (unique index prevents duplicate inserts if Notion retries delivery).
+
+Unhandled event types (`page.created`, `page.content_updated`, etc.) are logged and ignored — this is expected, not a bug.
+
+**Security:** every webhook request (except the one-time verification handshake) must carry a valid `X-Notion-Signature: sha256=<hex>` header — HMAC-SHA256 of the raw request body, keyed by `NOTION_WEBHOOK_SECRET`, verified with a constant-time comparison in `verifyNotionSignature()`. The raw body is read once and reused for both signature verification and JSON parsing — don't refactor this to parse-then-reserialize, that breaks the signature check.
+
+## Setting up (or re-pointing) the webhook subscription
+
+This must be redone any time the webhook URL changes (first deploy, custom domain change, etc.):
+
+1. Deploy/get the new public URL.
+2. `wrangler secret put NOTION_API_KEY` / `NOTION_DATABASE_ID` (deploy doesn't read `.dev.vars`).
+3. In Notion: **notion.so/my-integrations → "Chau Ticketing Dasboard" (workspace: "Channel Automation") → Webhooks tab** → create/edit the subscription URL to `https://<domain>/api/webhooks/notion`.
+4. Watch for the one-time verification POST — locally via the `wrangler dev` log, in production via `wrangler tail`. It logs a line: `Notion webhook verification token: secret_...`.
+5. Paste that token into Notion's verify field to confirm the subscription.
+6. `wrangler secret put NOTION_WEBHOOK_SECRET` with that exact token.
+7. Confirm event types `page.properties_updated` and `comment.created` are checked.
+8. **Confirm the integration's Capabilities tab has "Read comments" enabled** — this is a separate toggle from "Read content" and was the cause of a real bug during testing: comments synced with zero errors and zero log output because Notion silently never emitted the `comment.created` event at all until this was turned on. If comment sync mysteriously does nothing, check this first.
+
+## Local testing pattern used
+
+Local dev can't receive real Notion webhooks (Notion requires a public HTTPS URL). The pattern that worked: run `wrangler dev --port 8787`, then a Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:8787`, installed via `winget install --id Cloudflare.cloudflared` since it wasn't present), register the resulting `https://<random>.trycloudflare.com/api/webhooks/notion` URL in Notion, and do the verification handshake against that. The quick-tunnel URL is random and temporary — fine for one testing session, not for anything persistent.
+
+**Known local-dev gotcha:** starting `wrangler dev --port 8787` more than once without fully killing the previous instance leaves multiple `workerd.exe` processes all bound to (or attempting to bind) the same port on Windows, which manifests as requests silently hanging forever rather than a clean "port in use" error. If local requests start hanging with no server-side log line at all, check `Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'workerd' }` for duplicates and kill the stray trees (`taskkill /PID <id> /F /T`) rather than assuming the webhook code is broken. `wrangler dev` also occasionally throws an unrelated internal `ProxyController` crash with an empty error message after a long session — this is a dev-tooling quirk, not application code; just restart it.
+
+---
+
+# 12. SendGrid Email Integration
+
+Two transactional emails, both fire-and-forget (a failed send is logged but never blocks the ticket API response, same philosophy as the Notion sync):
+
+1. **Ticket received** — `sendTicketConfirmationEmail()` in `worker/services/sendgrid.ts`, called from `handleCreateTicket` in `worker/routes/tickets.ts` right after the ticket is inserted (alongside the Notion page creation).
+2. **Ticket resolved** — `sendTicketResolvedEmail()`, same file. Called from **two** places, one per direction a ticket can become Resolved:
+   - `handleAdminUpdateTicket` in `worker/routes/admin.ts` (admin marks it Resolved).
+   - `handlePagePropertiesUpdated` in `worker/routes/webhooks.ts` (Notion-driven status change to Resolved).
+
+Both call sites guard against re-sending on every save: `admin.ts` `SELECT`s the ticket's status *before* the `UPDATE` and only sends if `previousStatus !== "Resolved" && status === "Resolved"`; `webhooks.ts` reuses its existing `statusChanged` diff-before-write check. This was verified live — resolving a ticket, then re-PATCHing the same "Resolved" status, correctly sent the email exactly once.
+
+Both emails share a `sendEmail()` core helper and a `wrapEmailHtml()` template wrapper in `sendgrid.ts` to avoid duplicating the SendGrid request-building logic. All user-controlled fields (name, subject, ticket ref) are HTML-escaped before going into the email body — ticket ref in particular can be client-supplied (`body.ticketRef` in `handleCreateTicket`), so it's also `encodeURIComponent`-ed when building the ticket URL link, not just escaped in the visible text.
+
+**Ticket URL construction:** built as `` `${new URL(request.url).origin}/ticket/${encodeURIComponent(ticketRef)}` ``. In `tickets.ts` and `admin.ts` the origin comes from the actual incoming request. In `webhooks.ts` (where the "request" is Notion calling our webhook, not a user) the origin is still correct because it's derived from the same public URL Notion is hitting, which is the same domain the app itself is served from — so no separate `APP_BASE_URL` config var was needed; this was a deliberate choice over adding one more env var to keep in sync.
+
+**Environment:** `SENDGRID_API_KEY` (required, no default), `SENDGRID_FROM_EMAIL` (defaults to `support@channelautomation.com` in code), `SENDGRID_FROM_NAME` (defaults to `Channel Automation Support` in code). All three currently live in `.dev.vars` locally with a real API key.
+
+**Known issue — sender not fully authenticated.** SendGrid sends succeed (confirmed live for both email types, both landed in the inbox), but Outlook shows "We can't verify that this email came from the sender" on the received emails. This means SendGrid only has **Single Sender Verification** for `support@channelautomation.com` (proves ownership of that one mailbox) rather than full **Domain Authentication** (DKIM/SPF CNAME records added to `channelautomation.com`'s DNS, letting SendGrid cryptographically sign outgoing mail). This is **not a code issue** — nothing in the Worker needs to change. Fix is entirely in SendGrid's dashboard: **Settings → Sender Authentication → Authenticate Your Domain**, add the ~3 generated CNAME records to `channelautomation.com`'s DNS, then verify. Whoever manages that domain's DNS (Cloudflare DNS, registrar, etc.) needs to do this — not yet done as of this writing.
+
+---
+
+# 13. Bugs Found and Fixed This Session (context for future changes)
+
+1. **Chat role could be spoofed.** `TicketChat.tsx` used to have a client-side "Dev Role Toggle" letting anyone viewing a ticket link flip themselves to display as "Agent", and the backend (`worker/routes/messages.ts`) trusted whatever `senderRole` the client sent in the POST body — exploitable directly via API too, not just the UI. Fixed: the toggle is removed; the frontend now derives agent-vs-user purely from whether `admin_token` exists in `localStorage`, and — the actual security fix — the backend now **always** derives `sender_role` from `verifyAdminToken(request, env)` server-side and ignores whatever the client claims.
+2. **"My Tickets" count and the unread-notification badge showed 0 on first load/refresh.** `useTickets.ts` only fetched `/api/tickets` when `activeTab === 'list'`, but the app defaults to the `'submit'` tab. Fixed by fetching once whenever the non-admin view is active, regardless of which tab is selected.
+3. **"(synced from Notion)" wording removed from timeline messages** per feedback — Notion-driven status/priority changes now read identically to admin-driven ones (`"Status changed to X"`), no source annotation.
+
+---
+
+# 14. Design System (current, not the original placeholder palette)
+
+The original palette in early planning (`#2D3748`, `#63B3ED`, `#90CDF4`, `#F6AD55`) was superseded by a dark, slate/blue support-console aesthetic across `AdminTable.tsx` and `TicketChat.tsx` (see the "color Theme Updated and Unified" commit). Representative tokens actually in use:
+
+```text
+Backgrounds:  #080b10 (page), #0c1017 (panels), #111827 / #161f2e (cards, inputs)
+Borders:      #1f2937, #2d3a4e
+Text:         #e5e7eb (primary), #9ca3af / #6b7280 (muted)
+Accent blue:  #2563eb / #60a5fa   — primary actions, "user" role
+Accent amber: #f59e0b / #fbbf24  — "agent" role, priority badges
+Status colors: see STATUS_THEME / STATUS_PILL_CONFIG in src/constants/ticket.ts and src/components/AdminTable.tsx (six distinct colors, one per status)
+```
+
+Match this palette for any new UI rather than the old planning-doc colors.
+
+---
+
+# 15. Development Commands
 
 ```cmd
-npx wrangler d1 execute ticketing-db --local --command="SELECT COUNT(*) AS total_tickets FROM tickets;"
-```
-
-## Delete a ticket
-
-Example:
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="DELETE FROM tickets WHERE id = 5;"
-```
-
-Be careful with:
-
-```sql
-DELETE FROM tickets;
-```
-
-because it deletes all tickets.
-
-## Update a ticket
-
-Example:
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="UPDATE tickets SET status = 'CLOSED', updated_at = CURRENT_TIMESTAMP WHERE id = 5;"
-```
-
----
-
-# 14. Cloudflare Type Generation
-
-Command:
-
-```cmd
-npm run cf-typegen
-```
-
-This generated:
-
-```text
-worker-configuration.d.ts
-```
-
-The generated environment binding includes:
-
-```ts
-interface Env {
-  ticketing_db: D1Database;
-}
-```
-
-After changing `wrangler.jsonc`, regenerate types:
-
-```cmd
-npm run cf-typegen
-```
-
----
-
-# 15. Current Database Schema
-
-The `tickets` table currently contains:
-
-| Column | Type | Required | Default |
-|---|---|---|---|
-| id | INTEGER | Primary Key | Auto Increment |
-| name | TEXT | Yes | |
-| email | TEXT | Yes | |
-| subject | TEXT | Yes | |
-| request_type | TEXT | Yes | |
-| priority | TEXT | Yes | Medium |
-| description | TEXT | Yes | |
-| status | TEXT | Yes | OPEN |
-| created_at | TEXT | Yes | CURRENT_TIMESTAMP |
-| updated_at | TEXT | Yes | CURRENT_TIMESTAMP |
-
----
-
-# 16. Current Frontend Form
-
-Main file:
-
-```text
-src/App.tsx
-```
-
-The form currently contains:
-
-- Name
-- Email
-- Subject
-- Request Type
-- Priority
-- Description
-
-Request type options:
-
-```text
-Technical Support
-Billing
-General Inquiry
-Bug Report
-```
-
-Priority options:
-
-```text
-Low
-Medium
-High
-Urgent
-```
-
-Default priority:
-
-```text
-Medium
-```
-
----
-
-# 17. Current Frontend Submission
-
-The React form sends:
-
-```text
-POST /api/tickets
-```
-
-with:
-
-```json
-{
-  "name": "string",
-  "email": "string",
-  "subject": "string",
-  "requestType": "string",
-  "priority": "string",
-  "description": "string"
-}
-```
-
-Headers:
-
-```text
-Content-Type: application/json
-```
-
-The request is made using `fetch()`.
-
-The submission was tested successfully.
-
-The response previously returned:
-
-```json
-{
-  "success": true,
-  "message": "Ticket received successfully",
-  "ticket": {
-    "name": "Hi",
-    "email": "test@as.com",
-    "subject": "Cool",
-    "requestType": "Technical Support",
-    "priority": "High",
-    "description": "thats soo cool"
-  }
-}
-```
-
----
-
-# 18. Important Frontend/Database Naming Difference
-
-Frontend uses:
-
-```text
-requestType
-```
-
-Database uses:
-
-```text
-request_type
-```
-
-Do not unnecessarily rename the frontend field.
-
-The backend should map:
-
-```text
-requestType -> request_type
-```
-
-before inserting into D1.
-
----
-
-# 19. Current Worker
-
-File:
-
-```text
-worker/index.ts
-```
-
-The current Worker handles:
-
-```text
-POST /api/tickets
-```
-
-The current implementation successfully receives the ticket payload and returns a success response.
-
-Important:
-
-The next backend milestone is to make this endpoint actually INSERT the ticket into D1.
-
-At the moment, the ticket API should be treated as working at the HTTP/request-response level, but persistence is the next required backend step.
-
----
-
-# 20. TypeScript Issue Already Solved
-
-There was a TypeScript problem because:
-
-```ts
-request.json()
-```
-
-was inferred as `unknown`.
-
-Trying to access:
-
-```ts
-ticket.name
-ticket.email
-ticket.subject
-```
-
-caused TypeScript errors.
-
-This was resolved by explicitly typing/handling the request body.
-
-Lesson:
-
-> Cloudflare Worker request bodies should be explicitly typed/validated before accessing their properties.
-
----
-
-# 21. Tailwind CSS
-
-Tailwind was installed with:
-
-```cmd
-npm install tailwindcss @tailwindcss/vite
-```
-
-Installation succeeded.
-
-The build continued to work after installation.
-
-Packages:
-
-```text
-tailwindcss
-@tailwindcss/vite
-```
-
-Use Tailwind for primary UI styling.
-
-Use custom CSS when it provides genuine value.
-
----
-
-# 22. Design System
-
-Requested color palette:
-
-```text
-#2D3748
-#63B3ED
-#90CDF4
-#F6AD55
-```
-
-Suggested semantic roles:
-
-```text
-#2D3748 = primary dark/slate
-#63B3ED = primary blue
-#90CDF4 = light blue
-#F6AD55 = accent/orange
-```
-
-Design direction:
-
-- Modern
-- Professional
-- Clean
-- Production-quality
-- Support/ticketing SaaS appearance
-- Not a default Vite/React demo
-
----
-
-# 23. Build Status
-
-The project builds successfully.
-
-Command:
-
-```cmd
-npm run build
-```
-
-Status:
-
-```text
-SUCCESS
-```
-
-Both Worker and frontend production builds have worked.
-
----
-
-# 24. Development Commands
-
-Start local development:
-
-```cmd
-npm run dev
-```
-
-Build:
-
-```cmd
-npm run build
-```
-
-Lint:
-
-```cmd
+npm run dev          — Vite dev server w/ embedded Workers runtime (the normal way to develop)
+npm run build         — tsc -b && vite build (also produces the deployable dist/ticketing_system worker bundle)
 npm run lint
+npm run deploy        — npm run build && wrangler deploy
+npm run cf-typegen    — regenerate worker-configuration.d.ts after changing wrangler.jsonc bindings
 ```
 
-Deploy:
-
-```cmd
-npm run deploy
-```
-
-Generate Cloudflare types:
-
-```cmd
-npm run cf-typegen
-```
+Standalone `wrangler dev --port <n>` also works and is what was used for isolated webhook testing (see Section 11) — but prefer `npm run dev` for normal frontend+backend iteration since it hot-reloads properly; the standalone path requires an explicit `npm run build` before changes are picked up.
 
 ---
 
-# 25. Current Architecture
+# 16. Git Workflow
 
-Current basic request flow:
-
-```text
-User
- |
- v
-React Ticket Form
- |
- | POST /api/tickets
- v
-Cloudflare Worker
- |
- v
-D1 Database
-```
-
-The intended final architecture is larger:
-
-```text
-                         TICKETING SYSTEM
-
-                 +---------------------------+
-                 |                           |
-                 v                           v
-            CUSTOMER SIDE              SUPPORT SIDE
-                 |                           |
-                 |                           |
-          Submit Ticket                Admin Dashboard
-                 |                           |
-                 +------------+--------------+
-                              |
-                              v
-                         Cloudflare Worker
-                              |
-                 +------------+-------------+
-                 |                          |
-                 v                          v
-                D1                  Real-time layer
-          Persistent data             Live chat
-                 |                          |
-                 +------------+-------------+
-                              |
-                              v
-                       Ticket Conversation
-```
-
----
-
-# 26. Product Direction
-
-The application should not become only a CRUD ticket system.
-
-The desired product is:
-
-> Customer submits a ticket -> a ticket is created -> a dedicated live conversation/group is available -> customer and support/backend team communicate -> ticket is resolved.
-
-Each ticket should eventually have its own conversation.
-
-Example:
-
-```text
-Ticket #1042
-Subject: API Issue
-Priority: High
-Status: Open
-
-Participants:
-- Customer
-- Support Agent
-- Backend Developer
-
-Conversation:
-
-Customer:
-The API is returning 500.
-
-Support:
-Can you send the request ID?
-
-Customer:
-Yes, here it is.
-
-Backend Developer:
-I found the issue and am deploying a fix.
-```
-
----
-
-# 27. Live Chat Goal
-
-When a user submits a ticket:
-
-1. Create the ticket.
-2. Initialize a conversation associated with that ticket.
-3. Customer can view the conversation.
-4. Support team can access the conversation.
-5. Multiple support/backend members can participate.
-6. Messages should appear live without manual refresh.
-7. Conversation history should persist.
-8. Ticket status should be connected to the conversation lifecycle.
-
----
-
-# 28. Real-Time Architecture
-
-D1 alone is not a real-time messaging transport.
-
-D1 should be used for persistent data.
-
-A real-time mechanism should handle active communication.
-
-The likely Cloudflare-native architecture will involve:
-
-```text
-Cloudflare Worker
-       |
-       +---- D1
-       |     |
-       |     +-- tickets
-       |     +-- messages
-       |     +-- users
-       |
-       +---- Real-time layer
-             |
-             +-- WebSockets / Durable Objects or another appropriate Cloudflare-native mechanism
-```
-
-Before implementing chat, evaluate the current Cloudflare-native real-time options and choose the architecture that best fits the requirements.
-
-Do not immediately build polling unless there is a clear reason.
-
----
-
-# 29. Future Database Design
-
-Current table:
-
-```text
-tickets
-```
-
-Likely future tables:
-
-```text
-users
-ticket_participants
-ticket_messages
-ticket_assignments
-ticket_events
-attachments
-```
-
-Potential message fields:
-
-```text
-id
-ticket_id
-sender_id
-sender_type
-message
-created_at
-updated_at
-```
-
-Possible sender types:
-
-```text
-CUSTOMER
-AGENT
-```
-
-Do not blindly create all these tables.
-
-First design the relationships between:
-
-- Users
-- Tickets
-- Participants
-- Messages
-- Agents
-- Assignments
-
----
-
-# 30. Planned API
-
-Current:
-
-```text
-POST /api/tickets
-```
-
-Planned CRUD:
-
-```text
-POST   /api/tickets
-GET    /api/tickets
-GET    /api/tickets/:id
-PATCH  /api/tickets/:id
-DELETE /api/tickets/:id
-```
-
-Future features:
-
-```text
-Search
-Filtering
-Pagination
-Sorting
-Assignment
-Ticket history
-Message endpoints
-Unread message counts
-Attachments
-```
-
----
-
-# 31. Admin Dashboard Plan
-
-The future dashboard should include:
-
-```text
-Total Tickets
-Open Tickets
-In Progress
-Closed Tickets
-```
-
-Then:
-
-```text
-Search tickets
-Filter by status
-Filter by priority
-Filter by request type
-```
-
-Ticket table:
-
-```text
-ID
-Subject
-Request Type
-Priority
-Status
-Created At
-Assigned To
-Unread Messages
-```
-
-Clicking a ticket opens the ticket details.
-
----
-
-# 32. Ticket Details Plan
-
-Example:
-
-```text
-Ticket #128
-
-Login issue
-
-Customer:
-John Smith
-
-Email:
-john@example.com
-
-Priority:
-HIGH
-
-Status:
-OPEN
-
-Description:
-I cannot log into my account...
-
-Actions:
-Change Status
-Change Priority
-Assign Agent
-Open Conversation
-```
-
-The ticket details page should eventually contain the live conversation.
-
----
-
-# 33. Authentication Plan
-
-Authentication is required before production.
-
-Admin/support pages must not be publicly accessible.
-
-Future flow:
-
-```text
-/login
-   |
-   v
-Authentication
-   |
-   v
-Admin Dashboard
-```
-
-Need to design:
-
-- Customer identity
-- Support identity
-- Admin identity
-- Roles
-- Permissions
-- Authorization
-- Session handling
-
-Do not implement authentication blindly. Choose the appropriate Cloudflare-compatible authentication approach after the ticket/chat architecture is clearer.
-
----
-
-# 34. Immediate Roadmap
-
-## Step 1 — Finish Form UI
-
-Current focus.
-
-Use:
-
-- React
-- TypeScript
-- Tailwind
-- Custom CSS where appropriate
-
-Use the color palette:
-
-```text
-#2D3748
-#63B3ED
-#90CDF4
-#F6AD55
-```
-
-Goal:
-
-A beautiful, polished, responsive ticket submission form.
-
----
-
-## Step 2 — Persist Tickets to D1
-
-Update:
-
-```text
-worker/index.ts
-```
-
-The endpoint:
-
-```text
-POST /api/tickets
-```
-
-should:
-
-1. Parse request body.
-2. Validate required fields.
-3. Map `requestType` to `request_type`.
-4. Insert the ticket into D1.
-5. Get the inserted ticket ID.
-6. Return the created ticket.
-7. Return HTTP 400 for invalid input.
-8. Return HTTP 500 for database errors.
-
-Then test with:
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="SELECT * FROM tickets ORDER BY id DESC;"
-```
-
----
-
-## Step 3 — Build Ticket APIs
-
-Implement:
-
-```text
-GET /api/tickets
-GET /api/tickets/:id
-PATCH /api/tickets/:id
-DELETE /api/tickets/:id
-```
-
----
-
-## Step 4 — Ticket Listing
-
-Create the initial support/admin ticket list.
-
-Include:
-
-- Search
-- Status
-- Priority
-- Request type
-- Ticket ID
-- Created date
-
----
-
-## Step 5 — Ticket Details
-
-Create a detailed ticket page/view.
-
----
-
-## Step 6 — Design Messaging Data Model
-
-Before building chat, decide:
-
-- Who can participate?
-- How users are identified?
-- How agents are assigned?
-- How messages are stored?
-- What roles exist?
-- How unread messages work?
-- How message history works?
-- Whether attachments are needed.
-
----
-
-## Step 7 — Customer Conversation
-
-After ticket creation, customer should be able to access the ticket conversation.
-
----
-
-## Step 8 — Support Dashboard
-
-Support team should be able to:
-
-- View tickets
-- Open tickets
-- See conversation
-- Join conversation
-- Reply
-- Change status
-- Change priority
-- Assign tickets
-
----
-
-## Step 9 — Real-Time Chat
-
-Implement a Cloudflare-native real-time communication layer.
-
-Desired behavior:
-
-```text
-Customer sends message
-       |
-       v
-Support receives it immediately
-       |
-       v
-Support replies
-       |
-       v
-Customer receives it immediately
-```
-
-No manual refresh.
-
----
-
-## Step 10 — Authentication
-
-Add proper customer/support authentication and authorization.
-
----
-
-## Step 11 — Production
-
-Once local development is stable:
-
-```text
-Local D1
-   |
-   v
-Test
-   |
-   v
-Remote D1
-   |
-   v
-Cloudflare Worker deployment
-```
-
-Use:
-
-```cmd
-npm run deploy
-```
-
----
-
-# 35. Git Workflow
-
-Commit meaningful milestones.
-
-Examples:
-
-```text
-Initial Cloudflare React project
-Add ticket form and ticket API
-Improve ticket form UI
-Persist tickets to D1
-Add ticket listing API
-Add ticket details
-Add admin dashboard
-Add ticket message model
-Add real-time ticket chat
-Add authentication
-```
-
-Recommended workflow:
+Only commit when explicitly asked. When asked:
 
 ```cmd
 git status
 git add <changed files>
-git commit -m "Description"
+git commit -m "Clear, specific description"
 git status
 ```
 
+Don't rely on any specific commit hash or historical commit list in this doc — check `git log` for real, current history instead of trusting stale notes here.
+
 ---
 
-# 36. Current Status Checklist
+# 17. Current Status Checklist
 
 ```text
-[✓] React app created
-[✓] TypeScript configured
-[✓] Vite configured
-[✓] Cloudflare Worker configured
-[✓] Wrangler installed
-[✓] Wrangler authenticated
-[✓] Cloudflare D1 created
-[✓] D1 binding configured
-[✓] Local D1 configured
-[✓] D1 migration created
-[✓] Local migration applied
-[✓] tickets table created
-[✓] D1 schema verified
-[✓] Cloudflare types generated
-[✓] Ticket form created
-[✓] Ticket form submission working
-[✓] POST /api/tickets working at request/response level
-[✓] Tailwind installed
-[✓] Production build working
-[✓] Git initialized
-[✓] Git commits created
+[✓] React app, TypeScript, Vite, Tailwind, Cloudflare Worker — all set up
+[✓] D1 created, migrated (0001-0004), bound
+[✓] Ticket submission form (TicketForm.tsx)
+[✓] POST /api/tickets persists to D1
+[✓] GET /api/tickets, GET /api/tickets/:ref
+[✓] PATCH /api/tickets/:ref (admin, protected)
+[✓] POST /api/tickets/:ref/reopen
+[✓] Ticket messages table + GET/POST /api/tickets/:ref/messages
+[✓] Admin dashboard (AdminTable.tsx) with login, table, filters, inline status/assignee edit
+[✓] Customer + admin chat UI (TicketChat.tsx), polling-based
+[✓] Chat role security fix (server-side enforced agent role)
+[✓] Ticket count / unread badge fix
+[✓] Notion sync: App -> Notion on ticket create
+[✓] Notion sync: App -> Notion on admin status/priority edit
+[✓] Notion sync: Notion -> App via webhooks (status, priority, comments)
+[✓] Notion webhook signature verification
+[✓] Local webhook testing via cloudflared tunnel — verified live end-to-end
+[✓] SendGrid "ticket received" confirmation email — verified live, lands in inbox
+[✓] SendGrid "ticket resolved" email — verified live from both admin-panel and Notion-driven resolve paths, fires exactly once per transition
 
-[ ] Finish polished form UI
-[ ] Persist tickets into D1
-[ ] GET /api/tickets
-[ ] GET /api/tickets/:id
-[ ] PATCH /api/tickets/:id
-[ ] DELETE /api/tickets/:id
-[ ] Ticket listing UI
-[ ] Ticket details UI
-[ ] Messaging data model
-[ ] Customer conversation
-[ ] Support dashboard
-[ ] Real-time chat
-[ ] Authentication
-[ ] Authorization
-[ ] Production D1 testing
-[ ] Production deployment
+[ ] First production deployment
+[ ] Production secrets pushed (NOTION_API_KEY, NOTION_DATABASE_ID, NOTION_WEBHOOK_SECRET, ADMIN_SECRET_TOKEN, SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME)
+[ ] Production Notion webhook subscription pointed at the permanent URL
+[ ] SendGrid domain authentication (DKIM/SPF DNS records) — emails currently work but show as unverified sender (see Section 12)
+[ ] Notification when admin replies (approach not yet chosen — see Section 1)
+[ ] Real per-user authentication (current: one shared admin token)
+[ ] Attachments
+[ ] Search / filtering / pagination polish
+[ ] DELETE /api/tickets/:id (never built; unclear if actually needed for this product)
 ```
-
----
-
-# 37. AI Coding Agent Instructions
-
-The AI agent must continue from this exact project state.
-
-## Rules
-
-1. Do not recreate the project.
-2. Do not run `git init`.
-3. Do not replace the existing Cloudflare architecture.
-4. Do not teach basic React.
-5. Work incrementally.
-6. Give exact file paths.
-7. Give exact code changes.
-8. Give exact Windows CMD commands.
-9. Test every meaningful change.
-10. Do not claim success before verification.
-11. Use Tailwind for primary UI styling.
-12. Use custom CSS when appropriate.
-13. Respect the color palette.
-14. Use `--local` for D1 development.
-15. Use `--remote` only intentionally for production D1.
-16. Do not manually edit `.wrangler` database files.
-17. Do not modify already-applied migrations.
-18. Create a new migration for schema changes.
-19. Regenerate Cloudflare types after changing bindings.
-20. Commit working milestones to Git.
-21. Do not jump ahead while the developer is working on the current step.
-22. Before implementing live chat, design the data model and real-time architecture.
-23. Keep the final product production-oriented.
-24. Prefer Cloudflare-native solutions where appropriate.
-25. Keep explanations concise and practical.
-
----
-
-# 38. How the AI Should Continue
-
-When the developer asks for help:
-
-1. Determine the current project step.
-2. Check what has already been completed.
-3. Do not repeat completed setup.
-4. Explain only what is necessary.
-5. Provide the exact implementation.
-6. Tell the developer which file to modify.
-7. Give the exact command to test.
-8. Wait for verification/results before moving to the next milestone.
-
-If the developer says:
-
-> "I'm working on the form UI"
-
-Focus on the form UI.
-
-Do not jump to D1 or live chat.
-
-If the developer says:
-
-> "Form is done"
-
-Move to D1 persistence.
-
-If the developer says:
-
-> "D1 persistence works"
-
-Move to ticket APIs.
-
-Then continue toward:
-
-```text
-Ticket APIs
-    ↓
-Ticket Dashboard
-    ↓
-Ticket Details
-    ↓
-Conversation Model
-    ↓
-Live Chat
-    ↓
-Authentication
-    ↓
-Production
-```
-
----
-
-# 39. Final Product Vision
-
-The final product should feel like a modern support platform.
-
-Customer experience:
-
-```text
-Submit Ticket
-      ↓
-Ticket Created
-      ↓
-Conversation Opens
-      ↓
-Talk to Support Team
-      ↓
-Receive Updates
-      ↓
-Issue Resolved
-```
-
-Support experience:
-
-```text
-Login
-  ↓
-Dashboard
-  ↓
-See Tickets
-  ↓
-Open Ticket
-  ↓
-Join Conversation
-  ↓
-Communicate With Customer
-  ↓
-Coordinate With Backend Team
-  ↓
-Resolve Ticket
-  ↓
-Close Ticket
-```
-
-The core concept is:
-
-> A ticket is not just a database record. A ticket becomes a communication workspace between the customer and the team responsible for resolving it.
-
----
-
-# 40. Immediate Next Action
-
-The current immediate task is:
-
-**Finish the beautiful ticket submission form UI using React + Tailwind + CSS and the project's color palette.**
-
-After the form is finished and verified:
-
-**Make `POST /api/tickets` persist the ticket into local D1.**
-
-Then verify it with:
-
-```cmd
-npx wrangler d1 execute ticketing-db --local --command="SELECT * FROM tickets ORDER BY id DESC;"
-```
-
-Only after that should we continue with the ticket APIs and live conversation architecture.
