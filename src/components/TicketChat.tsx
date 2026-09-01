@@ -46,6 +46,10 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   const [sending, setSending] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    { id: number; file: File; previewUrl: string | null }[]
+  >([]);
+  const pendingIdCounter = useRef(0);
 
   // Agent vs. user is determined by whether this browser is logged into the
   // admin panel, not by a self-selectable toggle -- the server independently
@@ -167,32 +171,45 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newMessage.trim() || sending) return;
+    const trimmed = newMessage.trim();
+    if ((!trimmed && pendingAttachments.length === 0) || sending) return;
 
     setSending(true);
     try {
-      const res = await fetch(`/api/tickets/${ticketRef}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(isAdmin && adminToken
-            ? { Authorization: `Bearer ${adminToken}` }
-            : {}),
-        },
-        body: JSON.stringify({
-          senderName: isAdmin
-            ? localStorage.getItem("admin_user") || "Support Specialist"
-            : ticket?.name || "Submitter",
-          message: newMessage.trim(),
-        }),
-      });
-
-      if (res.ok) {
-        setNewMessage("");
-        if (textareaRef.current) textareaRef.current.style.height = "auto";
-        await fetchMessages(true);
-        scrollToBottom(); // Auto-scroll on user action when sending a message
+      if (pendingAttachments.length > 0) {
+        const toUpload = pendingAttachments;
+        setPendingAttachments([]);
+        for (const pending of toUpload) {
+          await uploadFile(pending.file);
+          if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+        }
       }
+
+      if (trimmed) {
+        const res = await fetch(`/api/tickets/${ticketRef}/messages`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(isAdmin && adminToken
+              ? { Authorization: `Bearer ${adminToken}` }
+              : {}),
+          },
+          body: JSON.stringify({
+            senderName: isAdmin
+              ? localStorage.getItem("admin_user") || "Support Specialist"
+              : ticket?.name || "Submitter",
+            message: trimmed,
+          }),
+        });
+
+        if (res.ok) {
+          setNewMessage("");
+          if (textareaRef.current) textareaRef.current.style.height = "auto";
+        }
+      }
+
+      await fetchMessages(true);
+      scrollToBottom(); // Auto-scroll on user action when sending a message
     } catch {
       console.error("Failed to send message");
     } finally {
@@ -256,18 +273,39 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     }
   };
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []);
-    e.target.value = "";
-    if (selected.length === 0) return;
-
+  const stageFiles = (files: File[]) => {
     setAttachError(null);
-    for (const file of selected) {
-      await uploadFile(file);
+    const accepted: { id: number; file: File; previewUrl: string | null }[] = [];
+
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        setAttachError(`${file.name} is larger than 10MB.`);
+        continue;
+      }
+      if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+        setAttachError(`${file.name} isn't a supported file type.`);
+        continue;
+      }
+      accepted.push({
+        id: ++pendingIdCounter.current,
+        file,
+        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      });
+    }
+
+    if (accepted.length > 0) {
+      setPendingAttachments((prev) => [...prev, ...accepted]);
     }
   };
 
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (selected.length === 0) return;
+    stageFiles(selected);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData?.items || []);
     const imageFiles = items
       .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
@@ -277,14 +315,28 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     if (imageFiles.length === 0) return;
 
     // A pasted screenshot has no meaningful text payload alongside it, so
-    // treat it purely as an attachment instead of also inserting into the
-    // message textarea.
+    // keep it out of the message textarea -- stage it as a pending
+    // attachment the user can review and remove before it's actually sent.
     e.preventDefault();
-    setAttachError(null);
-    for (const file of imageFiles) {
-      await uploadFile(file);
-    }
+    stageFiles(imageFiles);
   };
+
+  const removePendingAttachment = (id: number) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
+  const pendingAttachmentsRef = useRef(pendingAttachments);
+  pendingAttachmentsRef.current = pendingAttachments;
+
+  useEffect(() => {
+    return () => {
+      pendingAttachmentsRef.current.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
+    };
+  }, []);
 
   const initialLetter = (name?: string) =>
     name ? name.charAt(0).toUpperCase() : "A";
@@ -481,9 +533,6 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                 : null;
               const isImage = m.attachment_content_type?.startsWith("image/");
               const isVideo = m.attachment_content_type?.startsWith("video/");
-              const isInlineDoc =
-                m.attachment_content_type === "application/pdf" ||
-                m.attachment_content_type === "text/plain";
 
               return (
                 <div
@@ -518,7 +567,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                           <img
                             src={attachmentUrl}
                             alt={m.attachment_file_name || "attachment"}
-                            className="max-w-[260px] max-h-[220px] w-full object-cover block"
+                            className="max-w-[300px] max-h-[240px] w-full object-cover block"
                           />
                           <div className="px-3 py-2 text-[11px] text-[#9ca3af] truncate">
                             {m.attachment_file_name}
@@ -532,7 +581,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                             src={attachmentUrl}
                             controls
                             preload="metadata"
-                            className="w-[260px] max-h-[240px] bg-black block"
+                            className="w-[300px] max-h-[260px] bg-black block"
                           />
                           <div className="px-3 py-2 text-[11px] text-[#9ca3af] truncate">
                             {m.attachment_file_name}
@@ -540,37 +589,15 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                               ` · ${formatAttachmentSize(m.attachment_size_bytes)}`}
                           </div>
                         </div>
-                      ) : isInlineDoc ? (
-                        <div>
-                          <iframe
-                            src={attachmentUrl}
-                            title={m.attachment_file_name || "attachment"}
-                            className="w-[260px] h-[300px] border-0 bg-white block"
-                          />
-                          <a
-                            href={attachmentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-[#9ca3af] hover:bg-white/5 transition"
-                          >
-                            <span className="truncate">
-                              {m.attachment_file_name}
-                              {typeof m.attachment_size_bytes === "number" &&
-                                ` · ${formatAttachmentSize(m.attachment_size_bytes)}`}
-                            </span>
-                            <span className="text-[#60a5fa] font-semibold flex-shrink-0">Open ↗</span>
-                          </a>
-                        </div>
                       ) : (
                         <a
                           href={attachmentUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          download={m.attachment_file_name || undefined}
                           className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-white/5 transition"
                         >
-                          <span className="w-8 h-8 rounded-lg bg-[#2563eb]/15 border border-[#2563eb]/30 flex items-center justify-center flex-shrink-0 text-[#60a5fa]">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <span className="w-9 h-9 rounded-lg bg-[#2563eb]/15 border border-[#2563eb]/30 flex items-center justify-center flex-shrink-0 text-[#60a5fa]">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                               <polyline points="14 2 14 8 20 8" />
                             </svg>
@@ -579,11 +606,14 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                             <span className="block text-[12px] font-semibold text-white truncate">
                               {m.attachment_file_name}
                             </span>
-                            <span className="block text-[10.5px] text-[#6b7280]">
+                            <span className="block text-[10.5px] text-[#6b7280] inline-flex items-center gap-1">
                               {typeof m.attachment_size_bytes === "number"
-                                ? formatAttachmentSize(m.attachment_size_bytes)
+                                ? `${formatAttachmentSize(m.attachment_size_bytes)} · `
                                 : ""}
-                              {" · Download"}
+                              Open
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M7 17L17 7M9 7h8v8" />
+                              </svg>
                             </span>
                           </span>
                         </a>
@@ -606,6 +636,51 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
           )}
         </div>
       </div>
+
+      {/* Pending attachment review strip */}
+      {pendingAttachments.length > 0 && (
+        <div className="px-3 pt-2.5 pb-1 border-t border-[#1f2937] bg-[#0c1017] flex-shrink-0 flex flex-wrap gap-2">
+          {pendingAttachments.map((p) =>
+            p.previewUrl ? (
+              <div
+                key={p.id}
+                className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#1f2937] flex-shrink-0"
+              >
+                <img src={p.previewUrl} alt={p.file.name} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removePendingAttachment(p.id)}
+                  title="Remove"
+                  className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center text-[10px] leading-none transition"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div
+                key={p.id}
+                className="relative flex items-center gap-1.5 h-14 max-w-[170px] pl-2 pr-6 rounded-lg border border-[#1f2937] bg-[#111827] flex-shrink-0"
+              >
+                <span className="w-8 h-8 rounded-md bg-[#2563eb]/15 border border-[#2563eb]/30 flex items-center justify-center flex-shrink-0 text-[#60a5fa]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </span>
+                <span className="min-w-0 text-[10.5px] text-[#e5e7eb] truncate">{p.file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removePendingAttachment(p.id)}
+                  title="Remove"
+                  className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center text-[10px] leading-none transition"
+                >
+                  ×
+                </button>
+              </div>
+            ),
+          )}
+        </div>
+      )}
 
       {/* Attachment status strip */}
       {(uploadingCount > 0 || attachError) && (
@@ -660,13 +735,17 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Talk to Support Agent"
+          placeholder={
+            pendingAttachments.length > 0
+              ? "Add a caption, or just hit send…"
+              : "Talk to Support Agent"
+          }
           className="flex-1 bg-[#111827] border border-[#1f2937] rounded-2xl px-4 py-2.5 text-[12.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] transition resize-none max-h-[140px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         />
 
         <button
           type="submit"
-          disabled={sending || !newMessage.trim()}
+          disabled={sending || (!newMessage.trim() && pendingAttachments.length === 0)}
           className="w-10 h-10 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-40 text-white flex items-center justify-center transition cursor-pointer shadow flex-shrink-0 mb-0.5"
         >
           <svg
