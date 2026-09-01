@@ -8,7 +8,8 @@
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-08-20",
 	"assets": {
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
 	},
 	"observability": {
 		"enabled": true
@@ -19,6 +20,12 @@
 			"binding": "ticketing_db",
 			"database_name": "ticketing-db",
 			"database_id": "388cf420-533a-46cd-959f-a8a4b41413f2"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "ticket_attachments",
+			"bucket_name": "ticket-attachments"
 		}
 	]
 	/**

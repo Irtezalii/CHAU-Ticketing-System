@@ -11,7 +11,14 @@ export async function handleGetMessages(
   try {
     const { results } = await env.ticketing_db
       .prepare(
-        'SELECT * FROM ticket_messages WHERE ticket_ref = ? ORDER BY id ASC'
+        `SELECT m.*,
+           a.file_name AS attachment_file_name,
+           a.content_type AS attachment_content_type,
+           a.size_bytes AS attachment_size_bytes
+         FROM ticket_messages m
+         LEFT JOIN ticket_attachments a ON a.id = m.attachment_id
+         WHERE m.ticket_ref = ?
+         ORDER BY m.id ASC`
       )
       .bind(ticketRef)
       .all();

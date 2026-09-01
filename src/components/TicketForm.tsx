@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import type { FormState } from '../types/ticket';
 import { INITIAL_FORM, SLA_MAP } from '../constants/ticket';
+import {
+  ALLOWED_ATTACHMENT_TYPES,
+  ATTACHMENT_INPUT_ACCEPT,
+  MAX_ATTACHMENT_SIZE,
+  MAX_ATTACHMENTS_PER_TICKET,
+  formatAttachmentSize,
+} from '../constants/attachments';
 
 interface TicketFormProps {
   onTicketSubmitted: () => void;
@@ -13,6 +20,8 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const [ticketSla, setTicketSla] = useState<string>('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const calculatePriority = (): { priority: string; label: string } => {
     if (!form.requestType) return { priority: 'P3', label: 'Medium' };
@@ -30,6 +39,55 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     setErrorMsg(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (selected.length === 0) return;
+
+    setFileError(null);
+    setFiles((prev) => {
+      const next = [...prev];
+      for (const file of selected) {
+        if (next.length >= MAX_ATTACHMENTS_PER_TICKET) {
+          setFileError(`You can attach up to ${MAX_ATTACHMENTS_PER_TICKET} files.`);
+          break;
+        }
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+          setFileError(`${file.name} is larger than 10MB.`);
+          continue;
+        }
+        if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+          setFileError(`${file.name} isn't a supported file type.`);
+          continue;
+        }
+        next.push(file);
+      }
+      return next;
+    });
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFileError(null);
+  };
+
+  const uploadAttachments = async (ticketRef: string) => {
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('senderName', form.name);
+        await fetch(`/api/tickets/${ticketRef}/attachments`, {
+          method: 'POST',
+          body: formData,
+        });
+      } catch {
+        // Best-effort: the ticket is already created, so a failed attachment
+        // upload shouldn't block the confirmation screen.
+      }
+    }
   };
 
   const validate = (): string[] => {
@@ -101,7 +159,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
       const data = await res.json();
 
       if (res.ok && data.success) {
-        setSubmittedRef(data.ticket?.ticket_ref || generatedRef);
+        const finalRef = data.ticket?.ticket_ref || generatedRef;
+        if (files.length > 0) {
+          await uploadAttachments(finalRef);
+        }
+        setSubmittedRef(finalRef);
         setTicketSla(SLA_MAP[pCode] || 'within 4 business hours');
         onTicketSubmitted();
       } else {
@@ -118,6 +180,8 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
     setForm(INITIAL_FORM);
     setSubmittedRef(null);
     setErrorMsg(null);
+    setFiles([]);
+    setFileError(null);
   };
 
   const currentPriorityInfo = calculatePriority();
@@ -425,6 +489,66 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
                   <option>Specific date — I'll explain above</option>
                 </select>
               </div>
+            </div>
+          )}
+
+          {form.requestType && (
+            <div>
+              <label htmlFor="attachments" className="block text-[12.5px] font-semibold text-[#e5e7eb] mb-0.5">
+                Attachments <span className="text-[#6b7280] font-normal">(optional)</span>
+              </label>
+              <p className="text-[11.5px] text-[#6b7280] mb-2">
+                Got a screenshot, doc, or short recording? Attach it here — it helps us fix things faster.
+              </p>
+
+              <label
+                htmlFor="attachments"
+                className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-[#374151] rounded-lg px-3.5 py-5 text-center cursor-pointer hover:border-[#2563eb] transition-colors duration-150"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span className="text-[12.5px] text-[#9ca3af]">
+                  <span className="text-[#60a5fa] font-semibold">Click to attach a screenshot</span> or other file
+                </span>
+                <span className="text-[10.5px] text-[#6b7280]">Images, PDF, DOC, or video — up to 10MB each, {MAX_ATTACHMENTS_PER_TICKET} max</span>
+              </label>
+              <input
+                id="attachments"
+                type="file"
+                multiple
+                accept={ATTACHMENT_INPUT_ACCEPT}
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {files.length > 0 && (
+                <ul className="mt-2.5 space-y-1.5">
+                  {files.map((file, index) => (
+                    <li
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between gap-2 bg-[#111827] border border-[#1f2937] rounded-lg px-3 py-2 text-[12px] text-[#e5e7eb]"
+                    >
+                      <span className="truncate">
+                        {file.name} <span className="text-[#6b7280]">({formatAttachmentSize(file.size)})</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="shrink-0 text-[#f87171] hover:text-[#fca5a5] text-[11px] font-semibold cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {fileError && (
+                <p className="text-[11.5px] text-[#f87171] mt-1.5">{fileError}</p>
+              )}
             </div>
           )}
 

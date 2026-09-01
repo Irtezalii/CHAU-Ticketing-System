@@ -1,4 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ALLOWED_ATTACHMENT_TYPES,
+  ATTACHMENT_INPUT_ACCEPT,
+  MAX_ATTACHMENT_SIZE,
+  formatAttachmentSize,
+} from "../constants/attachments";
 
 interface TicketDetail {
   id: number;
@@ -20,6 +26,10 @@ interface Message {
   sender_role: "user" | "agent" | "system" | string;
   message: string;
   created_at: string;
+  attachment_id?: number | null;
+  attachment_file_name?: string | null;
+  attachment_content_type?: string | null;
+  attachment_size_bytes?: number | null;
 }
 
 interface TicketChatProps {
@@ -34,6 +44,8 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   // Agent vs. user is determined by whether this browser is logged into the
   // admin panel, not by a self-selectable toggle -- the server independently
@@ -44,6 +56,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
 
   const feedRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const initialLoadDone = useRef(false);
   const prevMessageCount = useRef(0);
 
@@ -191,6 +204,85 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSendMessage();
+    }
+  };
+
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const uploadFile = async (file: File) => {
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      setAttachError(`${file.name} is larger than 10MB.`);
+      return;
+    }
+    if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+      setAttachError(`${file.name} isn't a supported file type.`);
+      return;
+    }
+
+    setUploadingCount((c) => c + 1);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append(
+        "senderName",
+        isAdmin
+          ? localStorage.getItem("admin_user") || "Support Specialist"
+          : ticket?.name || "Submitter",
+      );
+
+      const res = await fetch(`/api/tickets/${ticketRef}/attachments`, {
+        method: "POST",
+        headers: {
+          ...(isAdmin && adminToken
+            ? { Authorization: `Bearer ${adminToken}` }
+            : {}),
+        },
+        body: formData,
+      });
+
+      if (res.ok) {
+        await fetchMessages(true);
+        scrollToBottom();
+      } else {
+        const data = await res.json().catch(() => null);
+        setAttachError(data?.message || `Failed to upload ${file.name}.`);
+      }
+    } catch {
+      setAttachError(`Failed to upload ${file.name}.`);
+    } finally {
+      setUploadingCount((c) => Math.max(0, c - 1));
+    }
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (selected.length === 0) return;
+
+    setAttachError(null);
+    for (const file of selected) {
+      await uploadFile(file);
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageFiles = items
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+
+    if (imageFiles.length === 0) return;
+
+    // A pasted screenshot has no meaningful text payload alongside it, so
+    // treat it purely as an attachment instead of also inserting into the
+    // message textarea.
+    e.preventDefault();
+    setAttachError(null);
+    for (const file of imageFiles) {
+      await uploadFile(file);
     }
   };
 
@@ -384,6 +476,15 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
               }
 
               const isMe = m.sender_role === senderRole;
+              const attachmentUrl = m.attachment_id
+                ? `/api/attachments/${m.attachment_id}`
+                : null;
+              const isImage = m.attachment_content_type?.startsWith("image/");
+              const isVideo = m.attachment_content_type?.startsWith("video/");
+              const isInlineDoc =
+                m.attachment_content_type === "application/pdf" ||
+                m.attachment_content_type === "text/plain";
+
               return (
                 <div
                   key={m.id}
@@ -403,15 +504,102 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                       {m.sender_role}
                     </span>
                   </div>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
-                      isMe
-                        ? "bg-[#1e293b] text-white rounded-br-none shadow border border-[#1e293b]"
-                        : "bg-[#111827] border border-[#1f2937] text-[#e5e7eb] rounded-bl-none"
-                    }`}
-                  >
-                    {m.message}
-                  </div>
+
+                  {attachmentUrl ? (
+                    <div
+                      className={`max-w-[85%] rounded-2xl overflow-hidden shadow ${
+                        isMe
+                          ? "bg-[#1e293b] border border-[#1e293b] rounded-br-none"
+                          : "bg-[#111827] border border-[#1f2937] rounded-bl-none"
+                      }`}
+                    >
+                      {isImage ? (
+                        <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          <img
+                            src={attachmentUrl}
+                            alt={m.attachment_file_name || "attachment"}
+                            className="max-w-[260px] max-h-[220px] w-full object-cover block"
+                          />
+                          <div className="px-3 py-2 text-[11px] text-[#9ca3af] truncate">
+                            {m.attachment_file_name}
+                            {typeof m.attachment_size_bytes === "number" &&
+                              ` · ${formatAttachmentSize(m.attachment_size_bytes)}`}
+                          </div>
+                        </a>
+                      ) : isVideo ? (
+                        <div>
+                          <video
+                            src={attachmentUrl}
+                            controls
+                            preload="metadata"
+                            className="w-[260px] max-h-[240px] bg-black block"
+                          />
+                          <div className="px-3 py-2 text-[11px] text-[#9ca3af] truncate">
+                            {m.attachment_file_name}
+                            {typeof m.attachment_size_bytes === "number" &&
+                              ` · ${formatAttachmentSize(m.attachment_size_bytes)}`}
+                          </div>
+                        </div>
+                      ) : isInlineDoc ? (
+                        <div>
+                          <iframe
+                            src={attachmentUrl}
+                            title={m.attachment_file_name || "attachment"}
+                            className="w-[260px] h-[300px] border-0 bg-white block"
+                          />
+                          <a
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-[#9ca3af] hover:bg-white/5 transition"
+                          >
+                            <span className="truncate">
+                              {m.attachment_file_name}
+                              {typeof m.attachment_size_bytes === "number" &&
+                                ` · ${formatAttachmentSize(m.attachment_size_bytes)}`}
+                            </span>
+                            <span className="text-[#60a5fa] font-semibold flex-shrink-0">Open ↗</span>
+                          </a>
+                        </div>
+                      ) : (
+                        <a
+                          href={attachmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={m.attachment_file_name || undefined}
+                          className="flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-white/5 transition"
+                        >
+                          <span className="w-8 h-8 rounded-lg bg-[#2563eb]/15 border border-[#2563eb]/30 flex items-center justify-center flex-shrink-0 text-[#60a5fa]">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[12px] font-semibold text-white truncate">
+                              {m.attachment_file_name}
+                            </span>
+                            <span className="block text-[10.5px] text-[#6b7280]">
+                              {typeof m.attachment_size_bytes === "number"
+                                ? formatAttachmentSize(m.attachment_size_bytes)
+                                : ""}
+                              {" · Download"}
+                            </span>
+                          </span>
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
+                        isMe
+                          ? "bg-[#1e293b] text-white rounded-br-none shadow border border-[#1e293b]"
+                          : "bg-[#111827] border border-[#1f2937] text-[#e5e7eb] rounded-bl-none"
+                      }`}
+                    >
+                      {m.message}
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -419,14 +607,36 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
         </div>
       </div>
 
+      {/* Attachment status strip */}
+      {(uploadingCount > 0 || attachError) && (
+        <div className="px-4 py-1.5 border-t border-[#1f2937] bg-[#0c1017] flex-shrink-0 text-[11px]">
+          {uploadingCount > 0 && (
+            <span className="text-[#9ca3af]">
+              Uploading {uploadingCount} file{uploadingCount > 1 ? "s" : ""}…
+            </span>
+          )}
+          {attachError && <span className="text-[#f87171]">{attachError}</span>}
+        </div>
+      )}
+
       {/* Dynamic Expandable Input Bar with Hidden Scrollbar */}
       <form
         onSubmit={handleSendMessage}
         className="p-3 border-t border-[#1f2937] bg-[#0c1017] flex items-end gap-2.5 z-10 flex-shrink-0"
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ATTACHMENT_INPUT_ACCEPT}
+          onChange={handleFileSelected}
+          className="hidden"
+        />
         <button
           type="button"
-          className="text-[#6b7280] hover:text-[#9ca3af] p-2 transition cursor-pointer mb-0.5"
+          onClick={handleAttachClick}
+          disabled={uploadingCount > 0}
+          className="text-[#6b7280] hover:text-[#9ca3af] p-2 transition cursor-pointer mb-0.5 disabled:opacity-40"
           title="Attach file"
         >
           <svg
@@ -449,6 +659,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Talk to Support Agent"
           className="flex-1 bg-[#111827] border border-[#1f2937] rounded-2xl px-4 py-2.5 text-[12.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] transition resize-none max-h-[140px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         />

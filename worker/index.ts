@@ -7,6 +7,11 @@ import {
   handleReopenTicket,
 } from './routes/tickets';
 import { handleGetMessages, handleSendMessage } from './routes/messages';
+import {
+  handleUploadAttachment,
+  handleGetAttachments,
+  handleDownloadAttachment,
+} from './routes/attachments';
 import { handleNotionWebhook } from './routes/webhooks';
 
 export type { Env };
@@ -63,6 +68,28 @@ export default {
       if (method === 'POST') {
         return handleSendMessage(ticketRef, request, env);
       }
+    }
+
+    // ----------------------------------------------------
+    // ATTACHMENTS: GET & POST /api/tickets/:ticketRef/attachments
+    // ----------------------------------------------------
+    const attachmentsMatch = pathname.match(/^\/api\/tickets\/([^/]+)\/attachments$/);
+    if (attachmentsMatch) {
+      const ticketRef = attachmentsMatch[1];
+      if (method === 'GET') {
+        return handleGetAttachments(ticketRef, env);
+      }
+      if (method === 'POST') {
+        return handleUploadAttachment(ticketRef, request, env);
+      }
+    }
+
+    // ----------------------------------------------------
+    // ATTACHMENTS: GET /api/attachments/:id (streams file from R2)
+    // ----------------------------------------------------
+    const attachmentDownloadMatch = pathname.match(/^\/api\/attachments\/([^/]+)$/);
+    if (method === 'GET' && attachmentDownloadMatch) {
+      return handleDownloadAttachment(attachmentDownloadMatch[1], env);
     }
 
     // ----------------------------------------------------
