@@ -20,6 +20,7 @@ export default function TicketCard({
 }: TicketCardProps) {
   const [isReopening, setIsReopening] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const refStr = ticket.ticket_ref || `TK-${ticket.id}`;
   const displayStatus =
@@ -41,6 +42,17 @@ export default function TicketCard({
         parseServerTimestamp(ticket.last_agent_message_at).getTime() >
           new Date(lastReadAt).getTime())
   );
+
+  const handleCopyRef = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(refStr);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API unavailable or permission denied -- fail silently.
+    }
+  };
 
   const handleOpenChat = () => {
     try {
@@ -90,9 +102,23 @@ export default function TicketCard({
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold tracking-wider text-[#60a5fa] bg-[#2563eb]/10 px-2.5 py-0.5 rounded border border-[#2563eb]/20">
-              {refStr}
-            </span>
+            <button
+              type="button"
+              onClick={handleCopyRef}
+              title="Click to copy"
+              className="text-[11px] font-bold tracking-wider text-[#60a5fa] bg-[#2563eb]/10 hover:bg-[#2563eb]/20 px-2.5 py-0.5 rounded border border-[#2563eb]/20 cursor-pointer transition-colors inline-flex items-center gap-1"
+            >
+              {copied ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                refStr
+              )}
+            </button>
 
             {/* Glowing Red Blinking Unread Notification Badge */}
             {hasUnreadReply && (

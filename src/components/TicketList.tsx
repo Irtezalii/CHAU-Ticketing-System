@@ -22,6 +22,7 @@ export default function TicketList({
 }: TicketListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Count tickets per status category
   const statusCounts = useMemo(() => {
@@ -40,12 +41,31 @@ export default function TicketList({
     setCurrentPage(1); // Reset page directly on user click
   };
 
-  // Filter tickets by selected status pill
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
+    setCurrentPage(1);
+  };
+
+  // Filter tickets by selected status pill and search term
   const filteredTickets = tickets.filter((t) => {
-    if (statusFilter === "All") return true;
-    const displayStatus =
-      t.status === "OPEN" ? "Not Started" : t.status || "Not Started";
-    return displayStatus === statusFilter;
+    if (statusFilter !== "All") {
+      const displayStatus =
+        t.status === "OPEN" ? "Not Started" : t.status || "Not Started";
+      if (displayStatus !== statusFilter) return false;
+    }
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      const refStr = t.ticket_ref || `TK-${t.id}`;
+      const matchesSearch =
+        t.subject.toLowerCase().includes(term) ||
+        t.name.toLowerCase().includes(term) ||
+        refStr.toLowerCase().includes(term) ||
+        (t.main_description && t.main_description.toLowerCase().includes(term));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
   });
 
   // Calculate pagination boundaries
@@ -59,8 +79,8 @@ export default function TicketList({
   return (
     <div className="p-5 sm:p-7 space-y-5 flex flex-col justify-between min-h-[520px] transition-opacity duration-150 ease-in-out">
       <div className="space-y-4">
-        {/* List Header & Refresh Button */}
-        <div className="flex justify-between items-center border-b border-[#1f2937] pb-3">
+        {/* List Header, Search & Refresh Button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1f2937] pb-3">
           <div>
             <h3 className="text-[15px] font-bold text-white">
               Submitted Tickets
@@ -69,13 +89,37 @@ export default function TicketList({
               Track and manage all submitted requests
             </p>
           </div>
-          <button
-            onClick={onRefresh}
-            disabled={fetchingTickets}
-            className="text-[11.5px] bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#60a5fa] px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50 font-medium whitespace-nowrap"
-          >
-            {fetchingTickets ? "Refreshing..." : "↻ Refresh"}
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none">
+              <input
+                type="text"
+                placeholder="Search tickets..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full sm:w-56 bg-[#111827] border border-[#1f2937] rounded-lg pl-8 pr-3 py-1.5 text-[11.5px] text-white placeholder-[#6b7280] focus:outline-none focus:border-[#2563eb] transition-all"
+              />
+              <svg
+                className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6b7280]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <button
+              onClick={onRefresh}
+              disabled={fetchingTickets}
+              className="text-[11.5px] bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#60a5fa] px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50 font-medium whitespace-nowrap flex-shrink-0"
+            >
+              {fetchingTickets ? "Refreshing..." : "↻ Refresh"}
+            </button>
+          </div>
         </div>
 
         {/* Sleek Wrapping Status Filter Bar */}
@@ -159,8 +203,18 @@ export default function TicketList({
           </div>
         ) : filteredTickets.length === 0 ? (
           <div className="py-12 text-center text-[13px] text-[#6b7280]">
-            No tickets found with status "
-            <span className="text-white font-medium">{statusFilter}</span>".
+            {searchTerm.trim() ? (
+              <>
+                No tickets match "
+                <span className="text-white font-medium">{searchTerm}</span>".
+              </>
+            ) : (
+              <>
+                No tickets found with status "
+                <span className="text-white font-medium">{statusFilter}</span>
+                ".
+              </>
+            )}
           </div>
         ) : (
           <div
