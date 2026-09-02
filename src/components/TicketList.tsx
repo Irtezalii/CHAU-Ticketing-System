@@ -23,7 +23,26 @@ export default function TicketList({
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [searchTerm, setSearchTerm] = useState("");
-  const [onlyMine, setOnlyMine] = useState(true);
+  const [onlyMine, setOnlyMine] = useState(() => {
+    try {
+      const saved = localStorage.getItem("only_mine_filter");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleOnlyMine = () => {
+    setOnlyMine((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("only_mine_filter", String(next));
+      } catch {
+        // Storage unavailable -- the toggle just won't persist across visits.
+      }
+      return next;
+    });
+  };
 
   const myEmail = useMemo(() => {
     try {
@@ -130,7 +149,7 @@ export default function TicketList({
             <button
               type="button"
               onClick={() => {
-                setOnlyMine((prev) => !prev);
+                toggleOnlyMine();
                 setCurrentPage(1);
               }}
               disabled={!myEmail}

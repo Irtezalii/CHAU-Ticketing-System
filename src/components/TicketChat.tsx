@@ -56,7 +56,6 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
   // re-verifies the admin token before ever recording a message as "agent".
   const adminToken = localStorage.getItem("admin_token");
   const isAdmin = Boolean(adminToken);
-  const senderRole: "user" | "agent" = isAdmin ? "agent" : "user";
 
   const feedRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -527,7 +526,9 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                 );
               }
 
-              const isMe = m.sender_role === senderRole;
+              // Fixed layout regardless of who's viewing: agent messages always
+              // on the right, user messages always on the left.
+              const isAgentMessage = m.sender_role === "agent";
               const attachmentUrl = m.attachment_id
                 ? `/api/attachments/${m.attachment_id}`
                 : null;
@@ -537,7 +538,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
               return (
                 <div
                   key={m.id}
-                  className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+                  className={`flex flex-col ${isAgentMessage ? "items-end" : "items-start"}`}
                 >
                   <div className="flex items-center gap-1.5 text-[10px] text-[#6b7280] mb-0.5 px-1">
                     <span className="font-semibold text-[#9ca3af]">
@@ -557,7 +558,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                   {attachmentUrl ? (
                     <div
                       className={`max-w-[85%] rounded-2xl overflow-hidden shadow ${
-                        isMe
+                        isAgentMessage
                           ? "bg-[#1e293b] border border-[#1e293b] rounded-br-none"
                           : "bg-[#111827] border border-[#1f2937] rounded-bl-none"
                       }`}
@@ -622,7 +623,7 @@ export default function TicketChat({ ticketRef, onBack }: TicketChatProps) {
                   ) : (
                     <div
                       className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
-                        isMe
+                        isAgentMessage
                           ? "bg-[#1e293b] text-white rounded-br-none shadow border border-[#1e293b]"
                           : "bg-[#111827] border border-[#1f2937] text-[#e5e7eb] rounded-bl-none"
                       }`}

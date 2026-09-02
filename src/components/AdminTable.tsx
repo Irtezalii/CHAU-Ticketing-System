@@ -38,7 +38,6 @@ const STATUS_THEME: Record<string, { text: string; border: string; bg: string; a
 };
 
 const ASSIGNEE_OPTIONS = ['Unassigned', 'Irtaza Ali', 'Support Agent', 'Backend Dev'];
-const ITEMS_PER_PAGE = 10;
 
 export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
   // Auth State
@@ -53,7 +52,17 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [copiedRef, setCopiedRef] = useState<string | null>(null);
+
+  const handleCopyRef = async (refStr: string) => {
+    try {
+      await navigator.clipboard.writeText(refStr);
+      setCopiedRef(refStr);
+      setTimeout(() => setCopiedRef((prev) => (prev === refStr ? null : prev)), 1500);
+    } catch {
+      // Clipboard API unavailable or permission denied -- fail silently.
+    }
+  };
 
   // LOGOUT HANDLER (Declared early so useEffect can safely access it)
   const handleLogout = () => {
@@ -95,15 +104,12 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
     void fetchTickets();
   }, [currentUser, authToken]);
 
-  // Reset page when filtering or searching
   const handleFilterChange = (status: string) => {
     setStatusFilter(status);
-    setCurrentPage(1);
   };
 
   const handleSearchChange = (term: string) => {
     setSearchTerm(term);
-    setCurrentPage(1);
   };
 
   // SECURE BACKEND LOGIN
@@ -180,10 +186,6 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
     return matchesSearch && matchesStatus;
   });
 
-  const totalPages = Math.ceil(filteredTickets.length / ITEMS_PER_PAGE) || 1;
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedTickets = filteredTickets.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
   // ----------------------------------------------------
   // LOGIN SCREEN
   // ----------------------------------------------------
@@ -246,7 +248,7 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
   // MAIN DASHBOARD SCREEN
   // ----------------------------------------------------
   return (
-    <div className="w-full max-w-[1280px] h-[85vh] min-h-[730px] bg-[#0c1017] border border-[#1f2937] rounded-2xl overflow-hidden shadow-2xl flex flex-col text-[#e5e7eb] font-sans my-auto">
+    <div className="w-full max-w-[1650px] h-[85vh] min-h-[730px] bg-[#0c1017] border border-[#1f2937] rounded-2xl overflow-hidden shadow-2xl flex flex-col text-[#e5e7eb] font-sans my-auto">
 
       <style>{`
         .custom-chat-scrollbar {
@@ -362,7 +364,7 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
           </div>
         ) : (
           <div className="w-full overflow-x-auto custom-chat-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
+            <table className="w-full text-left border-collapse min-w-[1300px]">
               <thead>
                 <tr className="border-b border-[#1f2937] text-[10px] font-bold tracking-wider text-[#6b7280] uppercase sticky top-0 bg-[#080b10] z-10">
                   <th className="py-3 px-4">Ref</th>
@@ -378,7 +380,7 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1f2937]/50 text-[11.5px]">
-                {paginatedTickets.map((t) => {
+                {filteredTickets.map((t) => {
                   const refStr = t.ticket_ref || `TK-${t.id}`;
                   const submittedDate = t.created_at
                     ? new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -389,14 +391,32 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
 
                   return (
                     <tr key={t.id} className="hover:bg-[#111827]/50 transition">
-                      <td className="py-3 px-4 font-mono font-bold text-[#60a5fa] whitespace-nowrap">{refStr}</td>
-                      <td className="py-3 px-4 font-medium text-white max-w-[160px] truncate" title={t.subject}>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyRef(refStr)}
+                          title="Click to copy"
+                          className="font-mono font-bold text-[#60a5fa] hover:text-[#93c5fd] cursor-pointer transition-colors inline-flex items-center gap-1.5"
+                        >
+                          {copiedRef === refStr ? (
+                            <>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              Copied
+                            </>
+                          ) : (
+                            refStr
+                          )}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-white max-w-[240px] truncate" title={t.subject}>
                         {t.subject}
                       </td>
-                      <td className="py-3 px-4 text-[#9ca3af] max-w-[200px] truncate" title={t.main_description || ''}>
+                      <td className="py-3 px-4 text-[#9ca3af] max-w-[340px] truncate" title={t.main_description || ''}>
                         {t.main_description || 'No description'}
                       </td>
-                      <td className="py-3 px-4 text-[#9ca3af] max-w-[140px] truncate">
+                      <td className="py-3 px-4 text-[#9ca3af] max-w-[180px] truncate">
                         <div className="truncate text-white">{t.name}</div>
                         <div className="text-[10px] text-[#6b7280] truncate">{t.email}</div>
                       </td>
@@ -452,30 +472,6 @@ export default function AdminTable({ onOpenChat, onGoHome }: AdminTableProps) {
             </table>
           </div>
         )}
-      </div>
-
-      {/* Pagination Footer */}
-      <div className="px-6 py-4 bg-[#0c1017] border-t border-[#1f2937] flex items-center justify-between flex-shrink-0">
-        <button
-          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-          className="text-xs bg-[#111827] hover:bg-[#1f2937] disabled:opacity-30 disabled:hover:bg-[#111827] disabled:cursor-not-allowed border border-[#1f2937] text-[#e5e7eb] px-4 py-2 rounded-lg transition cursor-pointer"
-        >
-          ← Previous
-        </button>
-
-        <span className="text-[11.5px] text-[#9ca3af]">
-          Page <span className="text-white font-semibold">{currentPage}</span> of{' '}
-          <span className="text-white font-semibold">{totalPages}</span>
-        </span>
-
-        <button
-          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages || totalPages === 0}
-          className="text-xs bg-[#111827] hover:bg-[#1f2937] disabled:opacity-30 disabled:hover:bg-[#111827] disabled:cursor-not-allowed border border-[#1f2937] text-[#e5e7eb] px-4 py-2 rounded-lg transition cursor-pointer"
-        >
-          Next →
-        </button>
       </div>
     </div>
   );
