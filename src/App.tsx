@@ -136,7 +136,7 @@ export default function App() {
                     : "bg-transparent text-[#9ca3af] hover:text-white hover:bg-[#111827]"
                 }`}
               >
-                <span>My Tickets</span>
+                <span>Tickets</span>
                 <span className="text-[10px] bg-[#2563eb]/20 text-[#60a5fa] font-bold px-1.5 py-0.5 rounded-full">
                   {tickets.length || "0"}
                 </span>

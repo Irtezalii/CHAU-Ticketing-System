@@ -1,4 +1,5 @@
 import { verifyAdminToken } from "../config/auth";
+import { appendAttachmentToNotion } from "../services/notion";
 import type { Env } from "../types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -28,10 +29,11 @@ export async function handleUploadAttachment(
   ticketRef: string,
   request: Request,
   env: Env,
+  ctx: ExecutionContext,
 ): Promise<Response> {
   try {
     const ticket = await env.ticketing_db
-      .prepare("SELECT ticket_ref FROM tickets WHERE ticket_ref = ? OR id = ?")
+      .prepare("SELECT ticket_ref, notion_page_id FROM tickets WHERE ticket_ref = ? OR id = ?")
       .bind(ticketRef, ticketRef)
       .first();
 
@@ -116,6 +118,16 @@ export async function handleUploadAttachment(
       )
       .bind(exactRef, senderName, senderRole, `📎 ${file.name}`, attachment.id)
       .first();
+
+    // Best-effort: mirror the attachment onto the ticket's Notion page so
+    // it shows up there too, not just in the live chat.
+    const notionPageId = (ticket as Record<string, any>).notion_page_id;
+    if (notionPageId) {
+      const fileUrl = `${new URL(request.url).origin}/api/attachments/${attachment.id}`;
+      ctx.waitUntil(
+        appendAttachmentToNotion(notionPageId, { url: fileUrl, name: file.name }, env),
+      );
+    }
 
     return Response.json(
       { success: true, attachment, message: insertedMessage },

@@ -23,17 +23,32 @@ export default function TicketList({
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [searchTerm, setSearchTerm] = useState("");
+  const [onlyMine, setOnlyMine] = useState(true);
+
+  const myEmail = useMemo(() => {
+    try {
+      return localStorage.getItem("submitter_email")?.trim().toLowerCase() || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Tickets scoped by the "My Tickets" toggle, before status/search filters
+  const scopedTickets = useMemo(() => {
+    if (!onlyMine || !myEmail) return tickets;
+    return tickets.filter((t) => t.email.trim().toLowerCase() === myEmail);
+  }, [tickets, onlyMine, myEmail]);
 
   // Count tickets per status category
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of tickets) {
+    for (const t of scopedTickets) {
       const displayStatus =
         t.status === "OPEN" ? "Not Started" : t.status || "Not Started";
       counts[displayStatus] = (counts[displayStatus] || 0) + 1;
     }
     return counts;
-  }, [tickets]);
+  }, [scopedTickets]);
 
   // Helper to handle filter selection cleanly
   const handleFilterChange = (status: string) => {
@@ -46,8 +61,8 @@ export default function TicketList({
     setCurrentPage(1);
   };
 
-  // Filter tickets by selected status pill and search term
-  const filteredTickets = tickets.filter((t) => {
+  // Filter tickets by selected status pill and search term (already scoped to "mine" if active)
+  const filteredTickets = scopedTickets.filter((t) => {
     if (statusFilter !== "All") {
       const displayStatus =
         t.status === "OPEN" ? "Not Started" : t.status || "Not Started";
@@ -113,6 +128,26 @@ export default function TicketList({
               </svg>
             </div>
             <button
+              type="button"
+              onClick={() => {
+                setOnlyMine((prev) => !prev);
+                setCurrentPage(1);
+              }}
+              disabled={!myEmail}
+              title={myEmail ? "Show only tickets you submitted" : "Submit a ticket first to use this filter"}
+              className={`text-[12px] px-3.5 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed font-bold whitespace-nowrap flex-shrink-0 border flex items-center gap-1.5 ${
+                onlyMine
+                  ? "bg-[#2563eb] border-[#2563eb] text-white shadow-[0_0_14px_rgba(37,99,235,0.5)] ring-1 ring-[#60a5fa]/50"
+                  : "bg-[#111827] hover:bg-[#1f2937] border-[#1f2937] text-[#9ca3af] hover:text-white"
+              }`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span>My Tickets</span>
+            </button>
+            <button
               onClick={onRefresh}
               disabled={fetchingTickets}
               className="text-[11.5px] bg-[#111827] hover:bg-[#1f2937] border border-[#1f2937] text-[#60a5fa] px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50 font-medium whitespace-nowrap flex-shrink-0"
@@ -146,7 +181,7 @@ export default function TicketList({
                   : "bg-[#1e293b] text-[#64748b]"
               }`}
             >
-              {tickets.length}
+              {scopedTickets.length}
             </span>
           </button>
 
@@ -207,6 +242,12 @@ export default function TicketList({
               <>
                 No tickets match "
                 <span className="text-white font-medium">{searchTerm}</span>".
+              </>
+            ) : onlyMine ? (
+              <>
+                None of your submitted tickets are currently in "
+                <span className="text-gray font-medium">{statusFilter}</span>
+                ".
               </>
             ) : (
               <>

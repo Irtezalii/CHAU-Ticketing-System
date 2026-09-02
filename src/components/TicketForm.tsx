@@ -22,6 +22,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
   const [ticketSla, setTicketSla] = useState<string>('');
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [refCopied, setRefCopied] = useState(false);
 
   const calculatePriority = (): { priority: string; label: string } => {
     if (!form.requestType) return { priority: 'P3', label: 'Medium' };
@@ -165,6 +166,11 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
         }
         setSubmittedRef(finalRef);
         setTicketSla(SLA_MAP[pCode] || 'within 4 business hours');
+        try {
+          localStorage.setItem('submitter_email', form.email.trim().toLowerCase());
+        } catch {
+          // Storage unavailable -- "My Tickets" filter just won't have a saved email.
+        }
         onTicketSubmitted();
       } else {
         setErrorMsg(data.message || 'Error submitting ticket.');
@@ -182,6 +188,18 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
     setErrorMsg(null);
     setFiles([]);
     setFileError(null);
+    setRefCopied(false);
+  };
+
+  const copyTicketRef = async () => {
+    if (!submittedRef) return;
+    try {
+      await navigator.clipboard.writeText(submittedRef);
+      setRefCopied(true);
+      setTimeout(() => setRefCopied(false), 1500);
+    } catch {
+      // Clipboard access denied — silently ignore.
+    }
   };
 
   const currentPriorityInfo = calculatePriority();
@@ -576,7 +594,7 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
               </button>
 
               <div className="text-center text-[11px] text-[#6b7280]">
-                A person reads every ticket. No bots replying.
+                A person reads every tickes and will reply you soon
               </div>
             </div>
           )}
@@ -593,9 +611,22 @@ export default function TicketForm({ onTicketSubmitted, onOpenChat }: TicketForm
             <p className="text-[12.8px] text-[#9ca3af] mt-1">It's with the support team now.</p>
           </div>
 
-          <div className="inline-block bg-[#111827] border border-[#1f2937] rounded-lg px-3.5 py-1.5 text-[14px] font-bold text-[#60a5fa] tracking-wide">
+          <button
+            type="button"
+            onClick={copyTicketRef}
+            title="Click to copy"
+            className="inline-flex items-center gap-1.5 bg-[#111827] border border-[#1f2937] hover:border-[#2563eb] rounded-lg px-3.5 py-1.5 text-[14px] font-bold text-[#60a5fa] tracking-wide cursor-pointer transition-colors duration-150"
+          >
             {submittedRef}
-          </div>
+            {refCopied ? (
+              <span className="text-[11px] font-semibold text-[#34d399]">Copied!</span>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            )}
+          </button>
 
           <div className="text-left bg-[#111827] border border-[#1f2937] rounded-xl p-3.5 space-y-2 text-[12.3px] text-[#9ca3af]">
             <div className="relative pl-4 before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#2563eb] before:rounded-full">

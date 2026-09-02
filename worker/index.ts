@@ -80,7 +80,7 @@ export default {
         return handleGetAttachments(ticketRef, env);
       }
       if (method === 'POST') {
-        return handleUploadAttachment(ticketRef, request, env);
+        return handleUploadAttachment(ticketRef, request, env, ctx);
       }
     }
 

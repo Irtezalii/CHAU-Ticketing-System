@@ -139,6 +139,55 @@ export async function updateNotionPage(
 }
 
 // ----------------------------------------------------
+// App -> Notion: append an uploaded attachment as a file block
+// ----------------------------------------------------
+export async function appendAttachmentToNotion(
+  pageId: string,
+  attachment: { url: string; name: string },
+  env: Env,
+): Promise<boolean> {
+  if (!env.NOTION_API_KEY) return false;
+
+  try {
+    const response = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${env.NOTION_API_KEY}`,
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        children: [
+          {
+            object: "block",
+            type: "file",
+            file: {
+              type: "external",
+              external: { url: attachment.url },
+              caption: [{ type: "text", text: { content: attachment.name } }],
+            },
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(
+        "Failed to append attachment to Notion page:",
+        pageId,
+        await response.text(),
+      );
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Error appending attachment to Notion page:", pageId, err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
 // Notion -> App: webhook signature verification
 // ----------------------------------------------------
 export async function verifyNotionSignature(
