@@ -6,7 +6,7 @@ This document contains the complete project context, current architecture, lesso
 
 Use this as context for any AI coding agent that needs to continue development from the current state.
 
-**Last updated:** 2026-08-29, after adding two-way Notion sync, fixing a chat role-spoofing security hole, fixing a ticket-count display bug, and adding SendGrid transactional emails (ticket-received + ticket-resolved). Update this section's date whenever this file is revised.
+**Last updated:** 2026-09-02, after: attachments/media upload shipped end-to-end (submit form + live chat, image/video previews, R2 storage) in the days since the last update; a click-to-copy ticket ID (TicketCard's ticket list badge, and now also the confirmation-screen badge in TicketForm); a client-side "My Tickets" email filter in TicketList; and syncing uploaded attachments onto the ticket's Notion page as file blocks. Update this section's date whenever this file is revised.
 
 ---
 
@@ -23,8 +23,8 @@ Remaining major items:
 1. First production deployment (`wrangler deploy` + push secrets + re-point the Notion webhook subscription at the permanent URL).
 2. **SendGrid domain authentication** — emails currently send successfully but show an "unverified sender" warning in Outlook/Gmail because only Single Sender Verification is set up, not full Domain Authentication (DKIM/SPF DNS records). See Section 12.
 3. Real-time/notification support so an admin reply surfaces to the customer without them needing the tab open and polling (not yet built — approach not yet chosen; options discussed: browser Notifications API, in-page toast, or true Web Push).
-4. Broader authentication (current admin auth is a single shared Bearer token + a hardcoded username allowlist, not per-user accounts).
-5. Attachments, search/filtering polish, pagination.
+4. Broader authentication (current admin auth is a single shared Bearer token + a hardcoded username allowlist, not per-user accounts). This also caps the new "My Tickets" filter (Section 10) — it's a `localStorage` convenience, not real identity.
+5. Backfilling existing attachments to Notion — the new attachment sync (Section 11, Direction 4) only fires for uploads going forward; tickets that already had attachments before this shipped won't retroactively get them pushed to Notion.
 
 ---
 
@@ -98,12 +98,13 @@ ticketing-system/
 │   │   └── useTickets.ts        — fetches /api/tickets; fetches on mount for the whole customer view (NOT gated by active tab — see Section 13 bugfix)
 │   ├── components/
 │   │   ├── Header.tsx
-│   │   ├── TicketForm.tsx       — ticket submission form, derives priority from request type + impact
-│   │   ├── TicketList.tsx       — customer's "My Tickets" list
-│   │   ├── TicketCard.tsx
-│   │   ├── TicketChat.tsx       — per-ticket chat UI (shared by customer view AND admin's chat view)
+│   │   ├── TicketForm.tsx       — ticket submission form, derives priority from request type + impact; attachment picker; on success stores the submitter's email in localStorage (`submitter_email`) for the "My Tickets" filter, and shows a click-to-copy ticket ID badge on the confirmation screen
+│   │   ├── TicketList.tsx       — customer's ticket list; status pills, search, pagination, and a "My Tickets" toggle (defaults ON) that filters to tickets matching the locally-saved `submitter_email`
+│   │   ├── TicketCard.tsx       — one ticket row; click-to-copy ticket ID badge, reopen button
+│   │   ├── TicketChat.tsx       — per-ticket chat UI (shared by customer view AND admin's chat view); attachment upload + inline image/video preview
 │   │   └── AdminTable.tsx       — admin dashboard: login, ticket table, status/assignee editing
 │   ├── constants/ticket.ts      — STATUS_THEME, STATUS_PILL_CONFIG, SLA_MAP, INITIAL_FORM
+│   ├── constants/attachments.ts — ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_TICKET, formatAttachmentSize()
 │   ├── types/ticket.ts          — TicketRecord, FormState
 │   └── utils/date.ts
 │
@@ -117,9 +118,10 @@ ticketing-system/
 │   │   ├── tickets.ts            — GET/POST /api/tickets (creates Notion page + sends confirmation email), GET /api/tickets/:ref, reopen
 │   │   ├── admin.ts              — POST /api/admin/login, PATCH /api/tickets/:ref (protected; pushes to Notion + sends resolved email on transition to Resolved)
 │   │   ├── messages.ts           — GET/POST /api/tickets/:ref/messages
+│   │   ├── attachments.ts        — POST/GET /api/tickets/:ref/attachments (upload to R2 + insert a chat message; also pushes the file to the ticket's Notion page if it has one — see Section 11 Direction 4), GET /api/attachments/:id (streams from R2)
 │   │   └── webhooks.ts           — POST /api/webhooks/notion (Notion -> App; also sends resolved email on Notion-driven transition to Resolved)
 │   └── services/
-│       ├── notion.ts             — all Notion HTTP calls: create page, update page, fetch page/comment/user, webhook signature verification
+│       ├── notion.ts             — all Notion HTTP calls: create page, update page, fetch page/comment/user, webhook signature verification, append attachment file block
 │       └── sendgrid.ts           — sendTicketConfirmationEmail(), sendTicketResolvedEmail(), shared sendEmail() core
 │
 ├── migrations/
@@ -128,7 +130,9 @@ ticketing-system/
 │   ├── 0002_create_messages.sql
 │   ├── 0003_add_admin_fields.sql
 │   ├── 0003_add_lead_phone.sql
-│   └── 0004_add_notion_sync_fields.sql
+│   ├── 0004_add_notion_sync_fields.sql
+│   ├── 0005_add_ticket_attachments.sql   — ticket_attachments table (metadata; files themselves live in R2)
+│   └── 0006_link_attachments_to_messages.sql — ticket_messages.attachment_id, so an upload can render inline in chat
 │
 ├── .dev.vars                     — local secrets (NOTION_API_KEY, NOTION_DATABASE_ID, NOTION_WEBHOOK_SECRET, SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME); gitignored. No .dev.vars.example (removed as redundant) -- .dev.vars itself is the reference for what vars exist.
 ├── package.json
@@ -138,7 +142,7 @@ ticketing-system/
 └── tsconfig*.json
 ```
 
-There is **no Hono, no KV, no R2, no Durable Objects, and no cron trigger** anywhere in this project. Real-time-ish behavior (chat messages, ticket list unread badges) is done by **polling** (`TicketChat.tsx` polls `/api/tickets/:ref/messages` every 3 seconds), not WebSockets. If a future task asks for true real-time push, that would be new infrastructure, not something already half-built.
+There is **no Hono, no KV, no Durable Objects, and no cron trigger** anywhere in this project. R2 (`ticket_attachments` binding) was added for attachment storage — see Section 11 Direction 4 and the migrations list above (0005/0006). Real-time-ish behavior (chat messages, ticket list unread badges) is done by **polling** (`TicketChat.tsx` polls `/api/tickets/:ref/messages` every 3 seconds), not WebSockets. If a future task asks for true real-time push, that would be new infrastructure, not something already half-built.
 
 ---
 
@@ -158,9 +162,17 @@ There is **no Hono, no KV, no R2, no Durable Objects, and no cron trigger** anyw
       "database_name": "ticketing-db",
       "database_id": "388cf420-533a-46cd-959f-a8a4b41413f2"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ticket_attachments",
+      "bucket_name": "ticket-attachments"
+    }
   ]
 }
 ```
+
+Also sets `assets.run_worker_first: ["/api/*"]` so `/api/*` always hits the Worker instead of ever being served as a static asset.
 
 No `vars` block — `NOTION_API_KEY`, `NOTION_DATABASE_ID`, `NOTION_WEBHOOK_SECRET`, `ADMIN_SECRET_TOKEN`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, and `SENDGRID_FROM_NAME` are all treated as **secrets**, not plain vars, in every environment. Locally they come from `.dev.vars`; in production they must be pushed individually with `wrangler secret put <NAME>` — **deploying does NOT read `.dev.vars`**.
 
@@ -207,7 +219,20 @@ npx wrangler d1 execute ticketing-db --local --command="SELECT * FROM tickets OR
 | sender_role | TEXT | `'user' \| 'agent' \| 'system'` — **`agent` can only be set server-side by a verified admin token**, never trusted from the client (see Section 13) |
 | message | TEXT | |
 | **notion_comment_id** | TEXT, UNIQUE where not null | added in migration 0004; dedupes retried Notion `comment.created` webhook deliveries |
+| **attachment_id** | INTEGER, references `ticket_attachments(id)` | added in migration 0006; set when the message is really a file upload, so the chat UI can render an inline preview/download instead of plain text |
 | created_at | TEXT | |
+
+## `ticket_attachments`
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| ticket_ref | TEXT | |
+| r2_key | TEXT | key of the actual file in the `ticket_attachments` R2 bucket, formatted `{ticketRef}/{uuid}-{sanitizedFileName}` |
+| file_name, content_type, size_bytes | | original filename/type/size as uploaded |
+| created_at | TEXT | |
+
+Added in migration 0005. The file bytes themselves live in R2, not D1 — this table is metadata only. Served back out via `GET /api/attachments/:id`, which streams straight from R2 (public, no auth).
 
 Never modify an already-applied migration. Add a new `migrations/000N_description.sql` for schema changes.
 
@@ -224,6 +249,9 @@ PATCH  /api/tickets/:ref             — admin-only (Bearer token); updates stat
 POST   /api/tickets/:ref/reopen      — public; sets status back to 'In Progress'
 GET    /api/tickets/:ref/messages    — chat history
 POST   /api/tickets/:ref/messages    — send a chat message; sender_role is derived from admin auth, not the request body
+GET    /api/tickets/:ref/attachments — list attachment metadata for a ticket
+POST   /api/tickets/:ref/attachments — upload a file (multipart/form-data: `file`, `senderName`); stores it in R2, inserts a `ticket_attachments` row + a matching `ticket_messages` row so it shows in chat, and (fire-and-forget) appends it as a file block on the ticket's Notion page if `notion_page_id` is set
+GET    /api/attachments/:id          — streams the file from R2 (public, no auth — this is what Notion's file block fetches, so it must stay reachable)
 POST   /api/webhooks/notion          — Notion -> App webhook receiver (see Section 11)
 ```
 
@@ -239,6 +267,10 @@ Known characteristics worth knowing before changing this area:
 - Chat polls every 3 seconds (`setInterval` in `TicketChat.tsx`) — no WebSockets/SSE.
 - `TicketChat` determines agent-vs-user purely from `localStorage.getItem('admin_token')` in the current browser — see Section 13 for why the role can't be spoofed even though this client-side check exists.
 - The unread-message badge and "My Tickets" count in `App.tsx` are both derived from the same `tickets` array populated by `useTickets` — see Section 13 for a bug that used to make both show `0` incorrectly.
+
+**"My Tickets" filter (client-side, no auth):** `GET /api/tickets` has no per-user scoping server-side — it always returns every ticket. Since there's no login system, `TicketList.tsx` fakes a "mine" scope entirely in the browser: `TicketForm.tsx` writes `localStorage.setItem('submitter_email', ...)` (lowercased/trimmed) right after a successful submission, and `TicketList.tsx` reads that key and filters `tickets` down to matching `email` when the "My Tickets" toggle (defaults ON) is active. This is per-browser convenience, not real identity/security — clearing site data or switching browsers loses the "mine" association, and it's trivially not a security boundary (anyone can still hit `GET /api/tickets` directly and see everything). If real per-user auth is ever added (Section 1, item 4), this should be replaced with a server-side filter.
+
+**Click-to-copy ticket ID:** both `TicketCard.tsx` (the ticket list badge) and `TicketForm.tsx` (the post-submit confirmation badge) turn the ticket ref into a `<button>` that calls `navigator.clipboard.writeText()` and shows a transient "Copied" state (~1.5s) via local component state. No shared component — implemented twice with the same pattern since they're visually distinct.
 
 ---
 
@@ -265,6 +297,15 @@ Handles two event types:
 - `comment.created` → looks up the ticket by `notion_page_id`, fetches the comment via `GET /v1/comments?block_id={page_id}`, resolves the commenter's name via `GET /v1/users/{id}`, and inserts a `ticket_messages` row with `sender_role='agent'` and `notion_comment_id` set (unique index prevents duplicate inserts if Notion retries delivery).
 
 Unhandled event types (`page.created`, `page.content_updated`, etc.) are logged and ignored — this is expected, not a bug.
+
+## Direction 4: App -> Notion (attachment sync)
+
+`worker/services/notion.ts` → `appendAttachmentToNotion(pageId, { url, name }, env)`, called from `handleUploadAttachment` in `worker/routes/attachments.ts` right after the attachment is saved to R2/D1 and its chat message inserted. `PATCH`es `https://api.notion.com/v1/blocks/{pageId}/children`, appending a `file` block with `type: "external"` pointing at `{origin}/api/attachments/{attachmentId}` — the same public URL the app itself uses to serve the file, so Notion just fetches it directly rather than the file being re-uploaded to Notion's own storage.
+
+- Only runs if the ticket already has a `notion_page_id` (i.e. its Notion page was created successfully — see Direction 1). If Notion sync failed or was skipped at ticket-creation time, attachments for that ticket are just never pushed; this is not separately retried.
+- Fire-and-forget via `ctx.waitUntil(...)` — same philosophy as the SendGrid emails (Section 12): a failed push is logged, never blocks the upload response the browser is waiting on. `handleUploadAttachment`'s signature grew a `ctx: ExecutionContext` parameter for this; `worker/index.ts` was updated to pass it through.
+- **No backfill.** This only fires on new uploads going forward. Attachments already in R2/D1 from before this shipped will not retroactively appear on their tickets' Notion pages.
+- Depends on `/api/attachments/:id` staying a public, unauthenticated endpoint — that's what Notion's servers fetch to render the file block. If auth is ever added to that route, this integration breaks silently (Notion will just show a broken file block, nothing calls out the failure to the app).
 
 **Security:** every webhook request (except the one-time verification handshake) must carry a valid `X-Notion-Signature: sha256=<hex>` header — HMAC-SHA256 of the raw request body, keyed by `NOTION_WEBHOOK_SECRET`, verified with a constant-time comparison in `verifyNotionSignature()`. The raw body is read once and reused for both signature verification and JSON parsing — don't refactor this to parse-then-reserialize, that breaks the signature check.
 
@@ -315,6 +356,8 @@ Both emails share a `sendEmail()` core helper and a `wrapEmailHtml()` template w
 1. **Chat role could be spoofed.** `TicketChat.tsx` used to have a client-side "Dev Role Toggle" letting anyone viewing a ticket link flip themselves to display as "Agent", and the backend (`worker/routes/messages.ts`) trusted whatever `senderRole` the client sent in the POST body — exploitable directly via API too, not just the UI. Fixed: the toggle is removed; the frontend now derives agent-vs-user purely from whether `admin_token` exists in `localStorage`, and — the actual security fix — the backend now **always** derives `sender_role` from `verifyAdminToken(request, env)` server-side and ignores whatever the client claims.
 2. **"My Tickets" count and the unread-notification badge showed 0 on first load/refresh.** `useTickets.ts` only fetched `/api/tickets` when `activeTab === 'list'`, but the app defaults to the `'submit'` tab. Fixed by fetching once whenever the non-admin view is active, regardless of which tab is selected.
 3. **"(synced from Notion)" wording removed from timeline messages** per feedback — Notion-driven status/priority changes now read identically to admin-driven ones (`"Status changed to X"`), no source annotation.
+
+**Note:** items 1-3 above predate 2026-08-29. Since then (through 2026-09-02): attachments/media upload shipped in full (not a bugfix, a new feature — see Section 11 Direction 4 and the attachment rows in Sections 5/8/9), plus the click-to-copy ticket ID and "My Tickets" filter described in Section 10.
 
 ---
 
@@ -386,14 +429,18 @@ Don't rely on any specific commit hash or historical commit list in this doc —
 [✓] Local webhook testing via cloudflared tunnel — verified live end-to-end
 [✓] SendGrid "ticket received" confirmation email — verified live, lands in inbox
 [✓] SendGrid "ticket resolved" email — verified live from both admin-panel and Notion-driven resolve paths, fires exactly once per transition
+[✓] Attachments — upload from both the submit form and live chat, R2 storage, inline image/video previews in chat, download links elsewhere
+[✓] Click-to-copy ticket ID (TicketCard list badge + TicketForm confirmation badge)
+[✓] "My Tickets" filter in TicketList (client-side, localStorage-based — see Section 10 for the "not real auth" caveat)
+[✓] Notion sync: uploaded attachments appended as file blocks on the ticket's Notion page (Section 11 Direction 4; forward-only, no backfill)
+[ ] Search / filtering polish beyond what's in TicketList today (status pills, text search, pagination already exist)
 
 [ ] First production deployment
 [ ] Production secrets pushed (NOTION_API_KEY, NOTION_DATABASE_ID, NOTION_WEBHOOK_SECRET, ADMIN_SECRET_TOKEN, SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME)
 [ ] Production Notion webhook subscription pointed at the permanent URL
 [ ] SendGrid domain authentication (DKIM/SPF DNS records) — emails currently work but show as unverified sender (see Section 12)
 [ ] Notification when admin replies (approach not yet chosen — see Section 1)
-[ ] Real per-user authentication (current: one shared admin token)
-[ ] Attachments
-[ ] Search / filtering / pagination polish
+[ ] Real per-user authentication (current: one shared admin token; also what the "My Tickets" filter is standing in for)
+[ ] Backfill attachments uploaded before Notion sync (Direction 4) shipped
 [ ] DELETE /api/tickets/:id (never built; unclear if actually needed for this product)
 ```
