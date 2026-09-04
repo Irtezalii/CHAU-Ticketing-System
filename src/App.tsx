@@ -10,7 +10,6 @@ import { parseServerTimestamp } from "./utils/date";
 export default function App() {
   const [activeTab, setActiveTab] = useState<"submit" | "list">("submit");
 
-  // View routing states
   const [isAdminView, setIsAdminView] = useState<boolean>(
     () => window.location.pathname === "/admin",
   );
@@ -20,11 +19,9 @@ export default function App() {
     return match ? match[1] : null;
   });
 
-  // Custom hook handles all fetching state & API logic
   const { tickets, fetchingTickets, fetchError, fetchTickets } =
     useTickets(isAdminView);
 
-  // Compute unread agent replies count
   const unreadCount = tickets.filter((t) => {
     const refStr = t.ticket_ref || `TK-${t.id}`;
     const lastRead =
@@ -39,7 +36,6 @@ export default function App() {
     );
   }).length;
 
-  // Navigation listener for browser back/forward buttons
   useEffect(() => {
     const handlePopState = () => {
       const currentPath = window.location.pathname;

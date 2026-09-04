@@ -62,7 +62,6 @@ export function useTickets(isAdminView: boolean) {
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminView]);
 
   return {

@@ -1,4 +1,4 @@
-import type { FormState } from "../types/ticket"; // FIXED: added 'type' keyword
+import type { FormState } from "../types/ticket"; 
 
 export const INITIAL_FORM: FormState = {
   name: "",
